@@ -29,6 +29,9 @@ get_args <- function() {
     parser$add_argument("-f", "--freeze", type="character", nargs=1,
                         default="hg18",
                         help="reference, hg18, hg19, etc")
+    parser$add_argument("-o", "--outFolder", type="character", nargs=1,
+                        default="intSiteSimulation",
+                        help="reference, hg18, hg19, etc")
     parser$add_argument("-s", "--sites", type="integer", nargs=1,
                         default=1000,
                         help="number of integration sites")
@@ -53,13 +56,20 @@ args <- get_args()
 
 ##print(args)
 
-library("RMySQL", quietly = TRUE)
-library(ggplot2)
-library(GenomicRanges)
-library(BSgenome)
-library(sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze), character.only=TRUE)
-library(ShortRead)
+##library("RMySQL", quietly = TRUE)
+##library(ggplot2)
+##library(GenomicRanges)
+##library(BSgenome)
+##library(sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze), character.only=TRUE)
+##library(ShortRead)
 
+libs <- c("RMySQL",
+          "ggplot2",
+          "GenomicRanges",
+          "ShortRead",
+          "BSgenome",
+          sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze))
+null <- suppressMessages(sapply(libs, library, character.only=TRUE))
 
 #' get sonic lengths from the database
 #' @param implied by ~/.my.cnf and args$group
@@ -303,8 +313,8 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
                              ltrBit="TCTAGCA",
                              largeLTRFrag="TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT",
                              vectorSeq="vector_sim.fa")
-    write.csv(sampleInfo, file.path(path, "sampleInfo.tsv"),
-              quote=FALSE, row.names=FALSE )
+    write.table(sampleInfo, file.path(path, "sampleInfo.tsv"),
+              quote=FALSE, sep="\t", row.names=FALSE )
     
     ## processingParams.tsv
     processingParams <- data.frame(qualityThreshold="?",
@@ -315,8 +325,8 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
                                    maxAlignStart="5",
                                    maxFragLength="2500",
                                    refGenome="hg18")
-    write.csv(processingParams, file.path(path, "processingParams.tsv"),
-              quote=FALSE, row.names=FALSE )
+    write.table(processingParams, file.path(path, "processingParams.tsv"),
+                quote=FALSE, sep="\t", row.names=FALSE )
     
     ## vector fasta
     file.copy(file.path(args$codeDir, "vector_sim.fa"),
@@ -324,7 +334,8 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
     
     message("Directory ", path, " created")
 }
-makeInputFolder(df, "intSiteSimulation")
+unlink(args$outFolder, recursive=TRUE, force=TRUE)
+makeInputFolder(df, args$outFolder)
 
 print(args)
 
