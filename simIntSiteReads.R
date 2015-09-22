@@ -22,7 +22,7 @@
 options(stringsAsFactors=FALSE)
 
 get_args <- function() {
-    library(argparse)
+    suppressMessages(library(argparse))
     codeDir <- dirname(sub("--file=", "", grep("--file=", commandArgs(trailingOnly=FALSE), value=T)))
     if( length(codeDir) == 0 ) codeDir <- "."
     parser <- ArgumentParser(formatter_class='argparse.RawTextHelpFormatter')
@@ -31,7 +31,7 @@ get_args <- function() {
                         help="reference, hg18, hg19, etc")
     parser$add_argument("-o", "--outFolder", type="character", nargs=1,
                         default="intSiteSimulation",
-                        help="reference, hg18, hg19, etc")
+                        help="output folder")
     parser$add_argument("-s", "--sites", type="integer", nargs=1,
                         default=1000,
                         help="number of integration sites")
@@ -39,10 +39,10 @@ get_args <- function() {
                         default=100,
                         help="number of sonic lengths for each site")
     parser$add_argument("-1", "--R1L", type="integer", nargs=1,
-                        default=120,
+                        default=175,
                         help="R1 read length")
     parser$add_argument("-2", "--R2L", type="integer", nargs=1,
-                        default=120,
+                        default=130,
                         help="R2 read length")
     parser$add_argument("-g", "--group", type="character", nargs=1,
                         default="intsites_miseq.read",
@@ -53,15 +53,7 @@ get_args <- function() {
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
 }
 args <- get_args()
-
 ##print(args)
-
-##library("RMySQL", quietly = TRUE)
-##library(ggplot2)
-##library(GenomicRanges)
-##library(BSgenome)
-##library(sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze), character.only=TRUE)
-##library(ShortRead)
 
 libs <- c("RMySQL",
           "ggplot2",
@@ -139,7 +131,6 @@ get_info_from_database <- function() {
     sonicLength <- get_sonicLength()
     return( list(site=allSites, sonicLength=sonicLength) )
 }
-sitesInfo <- get_info_from_database()
 
 
 
@@ -165,10 +156,13 @@ get_sequence_downstream <- function(x, chr, start, strand, width) {
     require(BSgenome)
     stopifnot( class(x) == "BSgenome" )
     options(stringsAsFactors=FALSE)
-    df <- data.frame(chr=chr,
-                     start=start,
-                     strand=strand,
-                     width=width)
+    
+    df <- merge(data.frame(chr=site$chr,
+                           start=site$position,
+                           strand=site$strand),
+                data.frame(width=width))
+    df <- dplyr::arrange(df, chr, start, strand, width)
+    
     chr <- df$chr
     start <- df$start
     strand <- df$strand
@@ -190,7 +184,7 @@ get_sequence_downstream <- function(x, chr, start, strand, width) {
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
 sampleInfo <- data.frame(alias="GTSP0308-1",
                          ##linkerSequence="GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT",
-                         linkerSequence="GAACGAGCACTAGTAAGCCCGATCGATCGATCCTCCGCTTAAGGGACT",
+                         linkerSequence="GAACGAGCACTAGTAAGCCCGGGGGGTTTTTTCTCCGCTTAAGGGACT",
                          bcSeq="GTATTCGACTTG",
                          gender="m",
                          primer="GAAAATC",
@@ -213,10 +207,25 @@ oligo$R2Start <- with(oligo, 1+nchar(paste0(P7, BC, Spacer, SP2))) #! 1 based
 oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
 
 
+## validated known sites from a prep
+##clone1	Clonal 293T cells with known integration at chr1+52699700
+##clone2	Clonal 293T cells with known integration at chr17+77440127
+##clone3	Clonal 293T cells with known integration at chr19+1330529
+##clone4	Clonal 293T cells with known integration at chr1-153461600
+##clone7	Clonal 293T cells with known integration at chr1+148889088
+site <- data.frame(chr=c("chr1", "chr17", "chr19", "chr1", "chr1"),
+                   position=c(52699700, 77440127, 1330529, 153461600, 148889088),
+                   strand=c("+", "+", "+", "-", "+") )
+
 
 ## get sequence of integration, downstream from the point of integration
-site <- head(sitesInfo$site, 1)
-width <- sample(sitesInfo$sonicLength, 100, replace=TRUE)
+##sitesInfo <- get_info_from_database()
+##site <- tail(head(sitesInfo$site, 3), 1)
+##site <- sitesInfo$site[3,]
+##width <- sample(sitesInfo$sonicLength, 100, replace=TRUE)
+width <- sample(200:1000, 100, replace=FALSE)
+width <- c(30:1000)
+
 intseq <- get_sequence_downstream(Hsapiens,
                                   site$chr,
                                   site$position,
@@ -238,6 +247,12 @@ intseq <- get_sequence_downstream(Hsapiens,
 make_miseq_reads <- function(oligo, intseq) {
     options(stringsAsFactors=FALSE)
     
+    patch_randomGATC <- function(reads, n) {
+        unname( sapply(reads, function(seq) {
+            if( nchar(seq)  >= n ) return(seq)
+            return( paste0(seq, paste0(rep("T", n-nchar(seq)), collapse="") ))
+        } ) ) }
+    
     molecule_in_miseq <- paste0(oligo$P7,
                                 reverseComplement(DNAStringSet(oligo$BC)),
                                 oligo$Spacer,
@@ -250,14 +265,6 @@ make_miseq_reads <- function(oligo, intseq) {
                                 reverseComplement(DNAStringSet(oligo$P5)))
     
     R2seq <- substr(molecule_in_miseq, oligo$R2Start, oligo$R2Start+args$R2L-1)
-    
-    patch_randomGATC <- function(reads, n) {
-        unname( sapply(reads, function(seq) {
-            if( nchar(seq)  >= n ) return(seq)
-            return( paste0(seq,
-                           paste0(sample(c("G","A","T","C"), n-nchar(seq), replace=TRUE), collapse="") ) )
-        } ) ) }
-    
     R2seq <- patch_randomGATC(R2seq, args$R2L)
     
     molecule_in_miseq.rc <- reverseComplement(DNAStringSet(molecule_in_miseq))
@@ -266,7 +273,13 @@ make_miseq_reads <- function(oligo, intseq) {
     
     I1seq <- rep(oligo$BC, length(molecule_in_miseq))
     
-    qname <- paste("@M03249", intseq$chr, intseq$strand, intseq$start, intseq$width, seq_along(I1seq), sep=":")
+    ##@M03249:67:000000000-AFCKK:1:1101:14105:1552 2:N:0:0"
+    qname <- sprintf("M03249:1:000-SIM%s:1:1:%s:%s",
+                     paste0(intseq$chr,
+                            ifelse(intseq$strand=="+", "p", "m"),
+                            intseq$start),
+                     intseq$width,
+                     seq_along(I1seq) )
     
     return(data.frame(I1=as.character(I1seq),
                       R1=as.character(R1seq),
