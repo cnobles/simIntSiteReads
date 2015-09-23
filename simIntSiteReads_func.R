@@ -79,26 +79,23 @@ get_sites <- function() {
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "+", 30)
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "-", 30)
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "-", c(30,40))
-get_sequence_downstream <- function(x, chr, start, strand, width) {
+get_sequence_downstream <- function(x, chr, position, strand, width) {
     require(BSgenome)
     stopifnot( class(x) == "BSgenome" )
     options(stringsAsFactors=FALSE)
     
-    df <- merge(data.frame(chr=site$chr,
-                           start=site$position,
-                           strand=site$strand),
+    df <- merge(data.frame(chr=chr,
+                           position=position,
+                           strand=strand),
                 data.frame(width=width))
-    df <- dplyr::arrange(df, chr, start, strand, width)
-    
-    chr <- df$chr
-    start <- df$start
-    strand <- df$strand
-    width <- df$width
+    df <- dplyr::arrange(df, chr, position, strand, width)
     
     seq <- with(df, as.character( getSeq(
         x,
-        shift(flank(GRanges(chr, IRanges(start, start), strand),
-                    width=width, start=FALSE, ignore.strand=FALSE),
+        shift(flank(GRanges(chr, IRanges(position, position), strand),
+                    width=width,
+                    start=FALSE,
+                    ignore.strand=FALSE),
               shift= ifelse(strand=="+", -1, +1) ) )
                                  ) )
     return( cbind(seq, df ))
@@ -122,9 +119,9 @@ make_miseq_reads <- function(oligo, intseq) {
     
     patch_randomGATC <- function(reads, n) {
         unname( sapply(reads, function(seq) {
-            if( nchar(seq)  >= n ) return(seq)
-            return( paste0(seq, paste0(rep("T", n-nchar(seq)), collapse="") ))
-        } ) ) }
+                           if( nchar(seq)  >= n ) return(seq)
+                           return( paste0(seq, paste0(rep("T", n-nchar(seq)), collapse="") ))
+                       } ) ) }
     
     molecule_in_miseq <- paste0(oligo$P7,
                                 reverseComplement(DNAStringSet(oligo$BC)),
@@ -150,7 +147,7 @@ make_miseq_reads <- function(oligo, intseq) {
     qname <- sprintf("M03249:1:000-SIM%s:1:1:%s:%s",
                      paste0(intseq$chr,
                             ifelse(intseq$strand=="+", "p", "m"),
-                            intseq$start),
+                            intseq$position),
                      intseq$width,
                      seq_along(I1seq) )
     
@@ -163,11 +160,13 @@ make_miseq_reads <- function(oligo, intseq) {
 
 
 #' make Primary Analysis Directory according to intSiteCaller readme
-#' @param df data frame of I1, R1, R2 reads and the common part of qname 
-#' @param path string of path
+#' @param df data frame of I1, R1, R2 reads and the common part of qname
+#' @param sampleInfo one line data frame used to generate sim reads
+#' @param path string of path, default to intSiteSimulation
 #' @return nothing returned, a directory is created and ready for analysis
-#' @example makeInputFolder(df, "intSiteSimulation")
-makeInputFolder <- function(df=df, path="intSiteSimulation") {
+#' @example makeInputFolder(df, sampleInfo, "intSiteSimulation")
+#'
+makeInputFolder <- function(df=df, sampleInfo, path="intSiteSimulation") {
     unlink(path, recursive=TRUE, force=TRUE)
     
     ## make Data directory
@@ -189,19 +188,11 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
            pair=c("I1", "R1", "R2"),
            comment=c("1:N:0:0", "1:N:0:0", "2:N:0:0") )
     
-    ## sampleInfo.tsv
-    sampleInfo <- data.frame(alias="GTSP0308-1",
-                             linkerSequence="GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT",
-                             bcSeq="GTATTCGACTTG",
-                             gender="m",
-                             primer="GAAAATC",
-                             ltrBit="TCTAGCA",
-                             largeLTRFrag="TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT",
-                             vectorSeq="vector_sim.fa")
+    ## write sampleInfo.tsv
     write.table(sampleInfo, file.path(path, "sampleInfo.tsv"),
               quote=FALSE, sep="\t", row.names=FALSE )
     
-    ## processingParams.tsv
+    ## write processingParams.tsv
     processingParams <- data.frame(qualityThreshold="?",
                                    badQualityBases="5",
                                    qualitySlidingWindow="10",
@@ -213,7 +204,18 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
     write.table(processingParams, file.path(path, "processingParams.tsv"),
                 quote=FALSE, sep="\t", row.names=FALSE )
     
-    ## vector fasta
+    
+    ## copy sampleInfo.tsv
+    file.copy(file.path(args$codeDir, "sampleInfo.tsv"),
+              file.path(path, "sampleInfo.tsv"),
+              overwrite=TRUE)
+    
+    ## copy processingParams.tsv
+    file.copy(file.path(args$codeDir, "processingParams.tsv"),
+              file.path(path, "processingParams.tsv"),
+              overwrite=TRUE)
+    
+    ## copy vector fasta
     file.copy(file.path(args$codeDir, "vector_sim.fa"),
               file.path(path, "vector_sim.fa"), overwrite=TRUE )
     

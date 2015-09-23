@@ -79,14 +79,16 @@ sitesInfo <- get_info_from_database()
 #' alias,linkerSequence,bcSeq,gender,primer,ltrBit,largeLTRFrag,vectorSeq
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
 sampleInfo <- data.frame(alias="GTSP0308-1",
-                         ##linkerSequence="GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT",
+                       ##linkerSequence="GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT",
                          linkerSequence="GAACGAGCACTAGTAAGCCCGGGGGGTTTTTTCTCCGCTTAAGGGACT",
                          bcSeq="GTATTCGACTTG",
                          gender="m",
                          primer="GAAAATC",
                          ltrBit="TCTAGCA",
                          largeLTRFrag="TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT",
-                         vectorSeq="vector_WasLenti.fa")
+                         ##vectorSeq="vector_WasLenti.fa",
+                         vectorSeq="vector_sim.fa")
+sampleInfo <- read.table("sampleInfo.tsv", header=TRUE)
 
 #' @note this is specific to the integration protocol
 oligo <- data.frame(P5="AATGATACGGCGACCACCGA",
@@ -128,9 +130,9 @@ intseq <- get_sequence_downstream(Hsapiens,
                                   site$strand,
                                   width)
 
-df <- make_miseq_reads(oligo, intseq)
+I1R1R2qNamedf <- make_miseq_reads(oligo, intseq)
 
-makeInputFolder(df, args$outFolder)
+makeInputFolder(I1R1R2qNamedf, sampleInfo, args$outFolder)
 
 print(args)
 

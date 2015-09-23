@@ -1,6 +1,14 @@
-library(testthat)
+libs <- c("testthat",
+          "GenomicRanges",
+          "ShortRead",
+          "BSgenome",
+          sprintf("BSgenome.Hsapiens.UCSC.%s", "hg18"))
+null <- suppressMessages(sapply(libs, library, character.only=TRUE))
+
+source("simIntSiteReads_func.R")
 
 ## test on + strand
+context('test fetching sequence downstream')
 pos <- 59165408
 chr <- "chr3"
 for( chr in c("chr1", "chr2", "chr3") ) {
