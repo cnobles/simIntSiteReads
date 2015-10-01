@@ -63,15 +63,15 @@ get_sites <- function() {
 
 
 #' get sequence from a position down stream
-#' @param x reference, Hsapiens, etc
+#' @param sp  species, Hsapiens, etc
 #' @param chr chromosome
 #' @param pos start position
 #' @param strand strand, "+" or "-"
 #' @param width number of bases from start
 #' @return a dataframe with seq, chr, start, strand, width
 #' @note sequences are strand specific:
-#'       for + strand, it fetches x[start, width-1]
-#'       for - strand, it fetches RC(x[start-with+1, start])
+#'       for + strand, it fetches sp[start, width-1]
+#'       for - strand, it fetches RC(sp[start-with+1, start])
 #' @require GenomicRanges, BSgenome, BSgenome.Hsapiens.UCSC.hg18, ...etc
 #' @example
 #' library(BSgenome)
@@ -79,16 +79,16 @@ get_sites <- function() {
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "+", 30)
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "-", 30)
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "-", c(30,40))
-get_sequence_downstream <- function(x, chr, pos, strand, width) {
+get_sequence_downstream <- function(sp, chr, pos, strand, width) {
     #' debug code
     #' chr="chr3"
     #' pos=59165408
     #' strand="+"
     #' width=30
-    #' x=Hsapiens
+    #' sp=Hsapiens
     #'
     require(BSgenome)
-    stopifnot( class(x) == "BSgenome" )
+    stopifnot( class(sp) == "BSgenome" )
     options(stringsAsFactors=FALSE)
     
     ## expand width
@@ -107,7 +107,7 @@ get_sequence_downstream <- function(x, chr, pos, strand, width) {
     ## shift 1 upstream as flank start from the next base
     gr <- shift(gr, shift=ifelse(strand(gr)=="+", -1, +1))
     
-    seq <- getSeq(x, gr, as.character=TRUE)
+    seq <- getSeq(sp, gr, as.character=TRUE)
     
     return( cbind(seq, df ))
 }
