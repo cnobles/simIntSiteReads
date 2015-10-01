@@ -65,7 +65,7 @@ get_sites <- function() {
 #' get sequence from a position down stream
 #' @param x reference, Hsapiens, etc
 #' @param chr chromosome
-#' @param start start position
+#' @param pos start position
 #' @param strand strand, "+" or "-"
 #' @param width number of bases from start
 #' @return a dataframe with seq, chr, start, strand, width
@@ -79,25 +79,36 @@ get_sites <- function() {
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "+", 30)
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "-", 30)
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "-", c(30,40))
-get_sequence_downstream <- function(x, chr, position, strand, width) {
+get_sequence_downstream <- function(x, chr, pos, strand, width) {
+    #' debug code
+    #' chr="chr3"
+    #' pos=59165408
+    #' strand="+"
+    #' width=30
+    #' x=Hsapiens
+    #'
     require(BSgenome)
     stopifnot( class(x) == "BSgenome" )
     options(stringsAsFactors=FALSE)
     
+    ## expand width
     df <- merge(data.frame(chr=chr,
-                           position=position,
+                           pos=pos,
                            strand=strand),
                 data.frame(width=width))
-    df <- dplyr::arrange(df, chr, position, strand, width)
+    df <- dplyr::arrange(df, chr, pos, strand, width)
     
-    seq <- with(df, as.character( getSeq(
-        x,
-        shift(flank(GRanges(chr, IRanges(position, position), strand),
-                    width=width,
-                    start=FALSE,
-                    ignore.strand=FALSE),
-              shift= ifelse(strand=="+", -1, +1) ) )
-                                 ) )
+    ## downstream along strand
+    gr <- flank(GRanges(df$chr, IRanges(df$pos, df$pos), df$strand),
+                width=df$width,
+                start=FALSE,
+                ignore.strand=FALSE)
+    
+    ## shift 1 upstream as flank start from the next base
+    gr <- shift(gr, shift=ifelse(strand(gr)=="+", -1, +1))
+    
+    seq <- getSeq(x, gr, as.character=TRUE)
+    
     return( cbind(seq, df ))
 }
 
@@ -161,49 +172,43 @@ make_miseq_reads <- function(oligo, intseq) {
 
 #' make Primary Analysis Directory according to intSiteCaller readme
 #' @param df data frame of I1, R1, R2 reads and the common part of qname
-#' @param sampleInfo one line data frame used to generate sim reads
 #' @param path string of path, default to intSiteSimulation
 #' @return nothing returned, a directory is created and ready for analysis
-#' @example makeInputFolder(df, sampleInfo, "intSiteSimulation")
+#' @example makeInputFolder(df, "intSiteSimulation")
 #'
-makeInputFolder <- function(df=df, sampleInfo, path="intSiteSimulation") {
+makeInputFolder <- function(df=df, path="intSiteSimulation") {
     unlink(path, recursive=TRUE, force=TRUE)
+    message("Directory ", path, " deleted")
     
-    ## make Data directory
-    mapply( function(pair, comment) {
-        read <- ShortReadQ(DNAStringSet( df[[pair]] ),
-                           FastqQuality( sapply(nchar( df[[pair]] ), function(i) paste(rep("z",i), collapse="")) ),
-                           BStringSet( paste(df$qname, comment) ) )
+    stopifnot(c("I1", "R1", "R2") %in% colnames(df))
+    
+    ## write fastq files in Data
+    dir.create(file.path(path, "Data"),
+               recursive=TRUE,
+               showWarnings=FALSE)
+    
+    qnameComments <- c("I1"="1:N:0:0",
+                       "R1"="1:N:0:0",
+                       "R2"="2:N:0:0") 
+    
+    pairs <- c("I1", "R1", "R2")
+    fastqFile <- setNames(sprintf("Undetermined_S0_L001_%s_001.fastq.gz",
+                                  pairs), pairs)
+    
+    for( pair in pairs ) {
+        message("\nWriting ", pair)
         
-        dir.create(file.path(path, "Data"),
-                   recursive=TRUE,
-                   showWarnings=FALSE)
+        read <- ShortReadQ(
+            DNAStringSet( df[[pair]] ),
+            FastqQuality( sapply(nchar( df[[pair]] ),
+                                 function(i) paste(rep("z",i), collapse="")) ),
+            BStringSet( paste(df$qname, qnameComments[pair])) )
         
-        file <- file.path(path, "Data",
-                          sprintf("Undetermined_S0_L001_%s_001.fastq.gz", pair) )
-        
-        suppressWarnings(file.remove(file))
-        writeFastq(read, file=file, mode="w", compress=TRUE)
-    },
-           pair=c("I1", "R1", "R2"),
-           comment=c("1:N:0:0", "1:N:0:0", "2:N:0:0") )
-    
-    ## write sampleInfo.tsv
-    write.table(sampleInfo, file.path(path, "sampleInfo.tsv"),
-              quote=FALSE, sep="\t", row.names=FALSE )
-    
-    ## write processingParams.tsv
-    processingParams <- data.frame(qualityThreshold="?",
-                                   badQualityBases="5",
-                                   qualitySlidingWindow="10",
-                                   mingDNA="30",
-                                   minPctIdent="95",
-                                   maxAlignStart="5",
-                                   maxFragLength="2500",
-                                   refGenome="hg18")
-    write.table(processingParams, file.path(path, "processingParams.tsv"),
-                quote=FALSE, sep="\t", row.names=FALSE )
-    
+        writeFastq(read,
+                   file=file.path(path, "Data", fastqFile[pair]),
+                   mode="w", compress=TRUE)
+        message(file.path(path, "Data", fastqFile[pair]))
+    }
     
     ## copy sampleInfo.tsv
     file.copy(file.path(args$codeDir, "sampleInfo.tsv"),

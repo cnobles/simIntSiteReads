@@ -23,12 +23,20 @@ options(stringsAsFactors=FALSE)
 
 get_args <- function() {
     suppressMessages(library(argparse))
+    
     codeDir <- dirname(sub("--file=", "", grep("--file=", commandArgs(trailingOnly=FALSE), value=T)))
-    if( length(codeDir) == 0 ) codeDir <- "."
+    if( length(codeDir)!=1 ) codeDir <- list.files(path="~", pattern="simIntSiteReads$", recursive=TRUE, include.dirs=TRUE, full.names=TRUE)
+    stopifnot(file.exists(file.path(codeDir, "simIntSiteReads.R")))
+    stopifnot(file.exists(file.path(codeDir, "processingParams.tsv")))
+    
+    refGenome <- read.table(file.path(codeDir, "processingParams.tsv"),
+                            header=TRUE)$refGenome
+    stopifnot(length(refGenome)==1)
+    
     parser <- ArgumentParser(formatter_class='argparse.RawTextHelpFormatter')
     parser$add_argument("-f", "--freeze", type="character", nargs=1,
-                        default="hg18",
-                        help="reference, hg18, hg19, etc")
+                        default=refGenome,
+                        help="hg18, etc, default read from processingParams.tsv")
     parser$add_argument("-o", "--outFolder", type="character", nargs=1,
                         default="intSiteSimulation",
                         help="output folder")
@@ -53,7 +61,7 @@ get_args <- function() {
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
 }
 args <- get_args()
-##print(args)
+print(args)
 
 libs <- c("RMySQL",
           "ggplot2",
@@ -78,17 +86,10 @@ sitesInfo <- get_info_from_database()
 #' @note this is from one line of the sample information file
 #' alias,linkerSequence,bcSeq,gender,primer,ltrBit,largeLTRFrag,vectorSeq
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
-sampleInfo <- data.frame(alias="GTSP0308-1",
-                       ##linkerSequence="GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT",
-                         linkerSequence="GAACGAGCACTAGTAAGCCCGGGGGGTTTTTTCTCCGCTTAAGGGACT",
-                         bcSeq="GTATTCGACTTG",
-                         gender="m",
-                         primer="GAAAATC",
-                         ltrBit="TCTAGCA",
-                         largeLTRFrag="TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT",
-                         ##vectorSeq="vector_WasLenti.fa",
-                         vectorSeq="vector_sim.fa")
 sampleInfo <- read.table("sampleInfo.tsv", header=TRUE)
+stopifnot(nrow(sampleInfo)==1)
+sampleInfo$linkerSequence <- sub("N", "T", sampleInfo$linkerSequence)
+
 
 #' @note this is specific to the integration protocol
 oligo <- data.frame(P5="AATGATACGGCGACCACCGA",
@@ -132,7 +133,6 @@ intseq <- get_sequence_downstream(Hsapiens,
 
 I1R1R2qNamedf <- make_miseq_reads(oligo, intseq)
 
-makeInputFolder(I1R1R2qNamedf, sampleInfo, args$outFolder)
+makeInputFolder(I1R1R2qNamedf, args$outFolder)
 
-print(args)
 
