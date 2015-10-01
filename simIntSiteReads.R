@@ -131,7 +131,7 @@ intseq <- get_sequence_downstream(Hsapiens,
                                   site$strand,
                                   width)
 
-I1R1R2qNamedf <- make_miseq_reads(oligo, intseq)
+I1R1R2qNamedf <- make_miseq_reads(oligo, intseq, R1L=args$R1L, R2L=args$R2L)
 
 makeInputFolder(I1R1R2qNamedf, args$outFolder)
 

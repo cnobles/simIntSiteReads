@@ -125,7 +125,7 @@ get_sequence_downstream <- function(x, chr, pos, strand, width) {
 #'       I1: @M03249:(#chr):(#strand):(#start):(#width):(#index) 1:N:0:0
 #'       qname only contains the common part
 #' @example make_miseq_reads(oligo, intseq)
-make_miseq_reads <- function(oligo, intseq) {
+make_miseq_reads <- function(oligo, intseq, R1L=175, R2L=130) {
     options(stringsAsFactors=FALSE)
     
     patch_randomGATC <- function(reads, n) {
@@ -145,12 +145,12 @@ make_miseq_reads <- function(oligo, intseq) {
                                 reverseComplement(DNAStringSet(oligo$SP1)),
                                 reverseComplement(DNAStringSet(oligo$P5)))
     
-    R2seq <- substr(molecule_in_miseq, oligo$R2Start, oligo$R2Start+args$R2L-1)
-    R2seq <- patch_randomGATC(R2seq, args$R2L)
+    R2seq <- substr(molecule_in_miseq, oligo$R2Start, oligo$R2Start+R2L-1)
+    R2seq <- patch_randomGATC(R2seq, R2L)
     
     molecule_in_miseq.rc <- reverseComplement(DNAStringSet(molecule_in_miseq))
-    R1seq <- substr(molecule_in_miseq.rc, oligo$R1Start, oligo$R1Start+args$R1L-1)
-    R1seq <- patch_randomGATC(R1seq, args$R1L)
+    R1seq <- substr(molecule_in_miseq.rc, oligo$R1Start, oligo$R1Start+R1L-1)
+    R1seq <- patch_randomGATC(R1seq, R1L)
     
     I1seq <- rep(oligo$BC, length(molecule_in_miseq))
     
