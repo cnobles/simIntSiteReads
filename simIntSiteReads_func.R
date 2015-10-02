@@ -79,10 +79,10 @@ get_sites <- function() {
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "+", 30)
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "-", 30)
 #' get_sequence_downstream(Hsapiens, "chr3", 59165408, "-", c(30,40))
-get_sequence_downstream <- function(sp, chr, pos, strand, width) {
+get_sequence_downstream <- function(sp, chr, position, strand, width) {
     #' debug code
     #' chr="chr3"
-    #' pos=59165408
+    #' position=59165408
     #' strand="+"
     #' width=30
     #' sp=Hsapiens
@@ -93,13 +93,13 @@ get_sequence_downstream <- function(sp, chr, pos, strand, width) {
     
     ## expand width
     df <- merge(data.frame(chr=chr,
-                           pos=pos,
+                           position=position,
                            strand=strand),
                 data.frame(width=width))
-    df <- dplyr::arrange(df, chr, pos, strand, width)
+    df <- dplyr::arrange(df, chr, position, strand, width)
     
     ## downstream along strand
-    gr <- flank(GRanges(df$chr, IRanges(df$pos, df$pos), df$strand),
+    gr <- flank(GRanges(df$chr, IRanges(df$position, df$position), df$strand),
                 width=df$width,
                 start=FALSE,
                 ignore.strand=FALSE)

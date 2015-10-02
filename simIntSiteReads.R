@@ -88,7 +88,7 @@ sitesInfo <- get_info_from_database()
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
 sampleInfo <- read.table("sampleInfo.tsv", header=TRUE)
 stopifnot(nrow(sampleInfo)==1)
-sampleInfo$linkerSequence <- sub("N", "T", sampleInfo$linkerSequence)
+sampleInfo$linkerSequence <- gsub("N", "T", sampleInfo$linkerSequence)
 
 
 #' @note this is specific to the integration protocol
