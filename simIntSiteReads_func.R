@@ -69,6 +69,7 @@ get_sites <- function() {
 #'          get_random_loci(n=100)
 #' 
 get_random_loci <- function(sp=Hsapiens, n=20) {
+    require(BSgenome)
     chrLen <- seqlengths(sp)
     chrLen <- chrLen[grepl("^chr\\d+$", names(chrLen))]
     
