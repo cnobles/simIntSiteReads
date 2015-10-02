@@ -61,6 +61,36 @@ get_sites <- function() {
     return(sites)
 }
 
+#' get random loci from reference genome
+#' @param sp name of genome, Hsapiens, etc
+#' @param n  number of loci
+#' @return data.frame of chr, position, strand
+#' @example get_random_loci()
+#'          get_random_loci(n=100)
+#' 
+get_random_loci <- function(sp=Hsapiens, n=20) {
+    chrLen <- seqlengths(sp)
+    chrLen <- chrLen[grepl("^chr\\d+$", names(chrLen))]
+    
+    n.chr <- round(as.numeric(chrLen)/sum(as.numeric(chrLen))*n)
+    n.chr[1] <- n.chr[1]+n-sum(n.chr)
+    n.chr <- setNames(n.chr, names(chrLen))
+    
+    loci <- sapply(setNames(seq_along(n.chr), names(chrLen)),
+                   function(i) {
+                       return(as.integer(runif(n.chr[i],
+                                               min = 1000,
+                                               max = chrLen[i]-3000)))
+                   })
+    
+    loci.df <- plyr::ldply(loci, function(L)
+        { data.frame(position=L,
+                     strand=sample(c("+","-"), length(L), replace=TRUE)) },
+                           .id="chr")
+    return(loci.df)
+}
+
+
 
 #' get sequence from a position down stream
 #' @param sp  species, Hsapiens, etc

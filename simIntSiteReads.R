@@ -79,7 +79,7 @@ get_info_from_database <- function() {
     sonicLength <- get_sonicLength()
     return( list(site=allSites, sonicLength=sonicLength) )
 }
-sitesInfo <- get_info_from_database()
+##sitesInfo <- get_info_from_database()
 
 
 
