@@ -5,6 +5,14 @@ To create folder with simulated reads run:
 Rscript ./simIntSiteReads.R
 ```
 
+## Command-line Arguments
+
+We can introduce uniform random error in reads by option `-e`:
+```{bash}
+Rscript ./simIntSiteReads.R -e 1
+```
+
+
 # Testing
 
 In R console run:

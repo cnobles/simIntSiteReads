@@ -58,6 +58,8 @@ get_args <- function() {
     parser$add_argument("-c", "--codeDir", type="character", nargs=1,
                         default=codeDir,
                         help="Directory of code")
+    parser$add_argument("-e", "--error_percentage", type="integer", nargs=1,
+            default=0, help="percent of nucleotides in reads with substitution uniform random errors")
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
 }
 args <- get_args()
@@ -72,6 +74,7 @@ libs <- c("RMySQL",
 null <- suppressMessages(sapply(libs, library, character.only=TRUE))
 
 source(file.path(args$codeDir, "simIntSiteReads_func.R"))
+source(file.path(args$codeDir, "sequencing_error.R"))
 
 
 get_info_from_database <- function() {
@@ -132,6 +135,8 @@ intseq <- get_sequence_downstream(Hsapiens,
                                   width)
 
 I1R1R2qNamedf <- make_miseq_reads(oligo, intseq, R1L=args$R1L, R2L=args$R2L)
+
+I1R1R2qNamedf <- generate_seq_error(I1R1R2qNamedf, args$error_percentage)
 
 makeInputFolder(I1R1R2qNamedf, args$outFolder)
 
