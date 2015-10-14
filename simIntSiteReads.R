@@ -60,6 +60,10 @@ get_args <- function() {
                         help="Directory of code")
     parser$add_argument("-e", "--error_percentage", type="integer", nargs=1,
             default=0, help="percent of nucleotides in reads with substitution uniform random errors")
+
+    parser$add_argument("-w", "--width_distribution", type="character", nargs=1,
+            default="uniform", choices=c("uniform", "maxwell_boltzmann"), help="molecule width distribution for reads")
+
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
 }
 args <- get_args()
@@ -70,11 +74,13 @@ libs <- c("RMySQL",
           "GenomicRanges",
           "ShortRead",
           "BSgenome",
+          "distr",
           sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze))
 null <- suppressMessages(sapply(libs, library, character.only=TRUE))
 
 source(file.path(args$codeDir, "simIntSiteReads_func.R"))
 source(file.path(args$codeDir, "sequencing_error.R"))
+source(file.path(args$codeDir, "width_distribution.R"))
 
 
 get_info_from_database <- function() {
@@ -125,8 +131,20 @@ site <- data.frame(chr=c("chr1", "chr17", "chr19", "chr1", "chr1"),
 ##site <- tail(head(sitesInfo$site, 3), 1)
 ##site <- sitesInfo$site[3,]
 ##width <- sample(sitesInfo$sonicLength, 100, replace=TRUE)
-width <- sample(200:1000, 100, replace=FALSE)
-width <- c(30:1000)
+#width <- sample(200:1000, 100, replace=FALSE)
+#width <- c(30:1000)
+
+width <- NULL
+num_reads <- 100
+if (args$width_distribution == "uniform") {
+    min_molecule_len <- 30
+    max_molecule_len <- 1000
+    width <- uniform_width_distribution(num_reads, min_molecule_len, max_molecule_len)
+} else if (args$width_distribution == "maxwell_boltzmann") {
+    mean_molecule_len <- 100
+    width <- maxwell_boltzmann_width_distribution(num_reads, mean_molecule_len)
+}
+stopifnot(width != NULL)
 
 intseq <- get_sequence_downstream(Hsapiens,
                                   site$chr,
