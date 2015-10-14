@@ -12,6 +12,13 @@ We can introduce uniform random error in reads by option `-e`:
 Rscript ./simIntSiteReads.R -e 1
 ```
 
+Molecule length can be uniform or Maxwell-Boltzmann(MB).
+MB emulate real skewed read distribution:
+```{bash}
+Rscript ./simIntSiteReads.R -w uniform
+Rscript ./simIntSiteReads.R -w maxwell_boltzmann 
+```
+
 
 # Testing
 
