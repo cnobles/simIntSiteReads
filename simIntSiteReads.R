@@ -70,11 +70,13 @@ args <- get_args()
 print(args)
 
 libs <- c("RMySQL",
+          "dplyr",
           "ggplot2",
           "GenomicRanges",
           "ShortRead",
           "BSgenome",
           "distr",
+          "intSiteRetriever",
           sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze))
 null <- suppressMessages(sapply(libs, library, character.only=TRUE))
 
@@ -83,11 +85,11 @@ source(file.path(args$codeDir, "sequencing_error.R"))
 source(file.path(args$codeDir, "width_distribution.R"))
 
 
-get_info_from_database <- function() {
-    allSites <- get_sites()
-    sonicLength <- get_sonicLength()
-    return( list(site=allSites, sonicLength=sonicLength) )
-}
+#get_info_from_database <- function() {
+#    allSites <- get_sites()
+#    sonicLength <- get_sonicLength()
+#    return( list(site=allSites, sonicLength=sonicLength) )
+#}
 ##sitesInfo <- get_info_from_database()
 
 
@@ -121,9 +123,9 @@ oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
 ##clone3	Clonal 293T cells with known integration at chr19+1330529
 ##clone4	Clonal 293T cells with known integration at chr1-153461600
 ##clone7	Clonal 293T cells with known integration at chr1+148889088
-site <- data.frame(chr=c("chr1", "chr17", "chr19", "chr1", "chr1"),
-                   position=c(52699700, 77440127, 1330529, 153461600, 148889088),
-                   strand=c("+", "+", "+", "-", "+") )
+#site <- data.frame(chr=c("chr1", "chr17", "chr19", "chr1", "chr1"),
+#                   position=c(52699700, 77440127, 1330529, 153461600, 148889088),
+#                   strand=c("+", "+", "+", "-", "+") )
 
 
 ## get sequence of integration, downstream from the point of integration
@@ -133,6 +135,12 @@ site <- data.frame(chr=c("chr1", "chr17", "chr19", "chr1", "chr1"),
 ##width <- sample(sitesInfo$sonicLength, 100, replace=TRUE)
 #width <- sample(200:1000, 100, replace=FALSE)
 #width <- c(30:1000)
+
+NUMBER_OF_SITES <- 1000
+siteIDs <- seq(1, NUMBER_OF_SITES)
+reference_genome <- get_reference_genome(args$freeze)
+site <- get_random_positions(siteIDs, reference_genome, 'm', number_of_positions=1) 
+site$siteID <- NULL
 
 width <- NULL
 num_reads <- 100
