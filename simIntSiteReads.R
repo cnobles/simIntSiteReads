@@ -41,7 +41,7 @@ get_args <- function() {
                         default="intSiteSimulation",
                         help="output folder")
     parser$add_argument("-s", "--sites", type="integer", nargs=1,
-                        default=1000,
+                        default=5000,
                         help="number of integration sites")
     parser$add_argument("-l", "--sonicLength", type="integer", nargs=1,
                         default=100,
@@ -67,6 +67,7 @@ libs <- c("RMySQL",
           "ggplot2",
           "GenomicRanges",
           "ShortRead",
+          "BiocParallel",
           "BSgenome",
           sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze))
 null <- suppressMessages(sapply(libs, library, character.only=TRUE))
@@ -112,17 +113,38 @@ oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
 ##clone3	Clonal 293T cells with known integration at chr19+1330529
 ##clone4	Clonal 293T cells with known integration at chr1-153461600
 ##clone7	Clonal 293T cells with known integration at chr1+148889088
-site <- data.frame(chr=c("chr1", "chr17", "chr19", "chr1", "chr1"),
-                   position=c(52699700, 77440127, 1330529, 153461600, 148889088),
-                   strand=c("+", "+", "+", "-", "+") )
+##site <- data.frame(chr=c("chr1", "chr17", "chr19", "chr1", "chr1"),
+##                   position=c(52699700, 77440127, 1330529, 153461600, 148889088),
+##                   strand=c("+", "+", "+", "-", "+") )
 
+site <- get_random_loci(sp=Hsapiens, n=as.integer(args$sites*1.2))
+
+checkNbase <- function(site, width=5000) {
+    ##width <- 5000
+    seq.plus <- get_sequence_downstream(Hsapiens,
+                                        site$chr,
+                                        site$position,
+                                        "+",
+                                        width)
+    seq.minus <- get_sequence_downstream(Hsapiens,
+                                         site$chr,
+                                         site$position,
+                                         "-",
+                                         width)
+    Nclose <- grepl('N', seq.plus$seq) | grepl('N', seq.minus$seq)
+    return( Nclose )
+}
+isNClose <- checkNbase(site)
+
+site <- subset(site, !isNClose)
+site <- head(site, args$sites)
 
 ## get sequence of integration, downstream from the point of integration
 ##sitesInfo <- get_info_from_database()
 ##site <- tail(head(sitesInfo$site, 3), 1)
 ##site <- sitesInfo$site[3,]
 ##width <- sample(sitesInfo$sonicLength, 100, replace=TRUE)
-width <- sample(200:1000, 100, replace=FALSE)
+##width <- sample(200:1000, 100, replace=FALSE)
 width <- c(30:1000)
 
 intseq <- get_sequence_downstream(Hsapiens,
@@ -131,8 +153,15 @@ intseq <- get_sequence_downstream(Hsapiens,
                                   site$strand,
                                   width)
 
-I1R1R2qNamedf <- make_miseq_reads(oligo, intseq, R1L=args$R1L, R2L=args$R2L)
+intseq.list <- split(intseq, as.integer(1:nrow(intseq)/1000000+1))
 
+I1R1R2qName.list <- bplapply(intseq.list, function(intseq.df) {
+                                 make_miseq_reads(oligo, intseq.df, R1L=args$R1L, R2L=args$R2L)},
+                             BPPARAM=MulticoreParam(5))
+
+I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
+
+##I1R1R2qNamedf <- make_miseq_reads(oligo, intseq, R1L=args$R1L, R2L=args$R2L)
 makeInputFolder(I1R1R2qNamedf, args$outFolder)
 
 
