@@ -229,11 +229,13 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
     for( pair in pairs ) {
         message("\nWriting ", pair)
         
-        read <- ShortReadQ(
-            DNAStringSet( df[[pair]] ),
-            FastqQuality( sapply(nchar( df[[pair]] ),
-                                 function(i) paste(rep("z",i), collapse="")) ),
-            BStringSet( paste(df$qname, qnameComments[pair])) )
+        readLength <- nchar(df[[pair]])
+        scorez <- paste(rep("z", max(readLength)), collapse="")
+        score <- substring(scorez, 1, readLength) 
+        
+        read <- ShortReadQ(DNAStringSet( df[[pair]] ),
+                           FastqQuality( score ),
+                           BStringSet( paste(df$qname, qnameComments[pair])) )
         
         writeFastq(read,
                    file=file.path(path, "Data", fastqFile[pair]),
