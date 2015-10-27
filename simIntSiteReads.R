@@ -52,6 +52,9 @@ get_args <- function() {
     parser$add_argument("-2", "--R2L", type="integer", nargs=1,
                         default=130,
                         help="R2 read length")
+    parser$add_argument("-m", "--info", type="character", nargs=1,
+                        default="sampleInfo.tsv",
+                        help="metadata file, default sampleInfo.tsv")
     parser$add_argument("-g", "--group", type="character", nargs=1,
                         default="intsites_miseq.read",
                         help="number of sonic lengths for each site")
@@ -61,7 +64,7 @@ get_args <- function() {
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
 }
 args <- get_args()
-print(args)
+write.table(t(as.data.frame(args)), col.names=FALSE, quote=FALSE, sep="\t")
 
 libs <- c("RMySQL",
           "ggplot2",
@@ -87,8 +90,7 @@ get_info_from_database <- function() {
 #' @note this is from one line of the sample information file
 #' alias,linkerSequence,bcSeq,gender,primer,ltrBit,largeLTRFrag,vectorSeq
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
-sampleInfo <- read.table("sampleInfo.tsv", header=TRUE)
-##stopifnot(nrow(sampleInfo)==1)
+sampleInfo <- read.table(args$info, header=TRUE)
 sampleInfo$linkerSequence <- gsub("N", "T", sampleInfo$linkerSequence)
 
 
@@ -137,7 +139,7 @@ checkNbase <- function(site, width=3000) {
 isNClose <- checkNbase(site)
 
 site <- site[!isNClose,]
-site <- dplyr::sample_n(site, args$sites, replace=TRUE)
+site <- dplyr::sample_n(site, args$sites, replace=FALSE)
 
 ## get sequence of integration, downstream from the point of integration
 ##sitesInfo <- get_info_from_database()
@@ -145,7 +147,7 @@ site <- dplyr::sample_n(site, args$sites, replace=TRUE)
 ##site <- sitesInfo$site[3,]
 ##width <- sample(sitesInfo$sonicLength, 100, replace=TRUE)
 ##width <- sample(200:1000, 100, replace=FALSE)
-width <- c(30:1000)
+width <- c(31:1000)
 
 intseq <- get_sequence_downstream(Hsapiens,
                                   site$chr,
@@ -153,23 +155,25 @@ intseq <- get_sequence_downstream(Hsapiens,
                                   site$strand,
                                   width)
 
-##intseq.list <- split(intseq, as.integer(1:nrow(intseq)/1000000+1))
-##I1R1R2qName.list <- bplapply(intseq.list, function(intseq.df) {
-##make_miseq_reads(oligo, intseq.df, R1L=args$R1L, R2L=args$R2L)},
-##                             BPPARAM=MulticoreParam(5))
+as.numeric.factor <- function(x) {seq_along(levels(x))[x]}
+intseq <- dplyr::mutate(intseq,
+                        siteid=as.factor(paste0(chr, strand, position)),
+                        siteid=as.numeric.factor(siteid),
+                        sampleid=siteid%%nrow(oligo)+1)
 
-intseq.list <- split(intseq, 1+1:nrow(intseq)%%nrow(oligo))
+intseq.list <- split(intseq, intseq$sampleid)
 I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
     {message(i, "\tof\t", length(intseq.list))
-     df <- make_miseq_reads(oligo[i,], intseq.list[[i]],
-                            R1L=args$R1L, R2L=args$R2L)
+     df <- make_miseq_reads(oligo[i,],
+                            intseq.list[[i]],
+                            R1L=args$R1L,
+                            R2L=args$R2L)
      return(df) }
                             ,BPPARAM=MulticoreParam(5)) 
 
 
 I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
 
-##I1R1R2qNamedf <- make_miseq_reads(oligo, intseq, R1L=args$R1L, R2L=args$R2L)
 makeInputFolder(I1R1R2qNamedf, args$outFolder)
 
 

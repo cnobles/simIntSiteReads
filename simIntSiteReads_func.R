@@ -244,7 +244,7 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
     }
     
     ## copy sampleInfo.tsv
-    file.copy(file.path(args$codeDir, "sampleInfo.tsv"),
+    file.copy(file.path(args$codeDir, args$info),
               file.path(path, "sampleInfo.tsv"),
               overwrite=TRUE)
     
