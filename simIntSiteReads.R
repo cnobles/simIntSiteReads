@@ -88,7 +88,8 @@ get_info_from_database <- function() {
 #' alias,linkerSequence,bcSeq,gender,primer,ltrBit,largeLTRFrag,vectorSeq
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
 sampleInfo <- read.table("sampleInfo.tsv", header=TRUE)
-stopifnot(nrow(sampleInfo)==1)
+sampleInfo <- read.table("sampleInfom.tsv", header=TRUE)
+##stopifnot(nrow(sampleInfo)==1)
 sampleInfo$linkerSequence <- gsub("N", "T", sampleInfo$linkerSequence)
 
 
@@ -119,7 +120,7 @@ oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
 
 site <- get_random_loci(sp=Hsapiens, n=as.integer(args$sites*1.2))
 
-checkNbase <- function(site, width=5000) {
+checkNbase <- function(site, width=3000) {
     ##width <- 5000
     seq.plus <- get_sequence_downstream(Hsapiens,
                                         site$chr,
@@ -136,8 +137,8 @@ checkNbase <- function(site, width=5000) {
 }
 isNClose <- checkNbase(site)
 
-site <- subset(site, !isNClose)
-site <- head(site, args$sites)
+site <- site[!isNClose,]
+site <- dplyr::sample_n(site, args$sites, replace=TRUE)
 
 ## get sequence of integration, downstream from the point of integration
 ##sitesInfo <- get_info_from_database()
@@ -153,11 +154,19 @@ intseq <- get_sequence_downstream(Hsapiens,
                                   site$strand,
                                   width)
 
-intseq.list <- split(intseq, as.integer(1:nrow(intseq)/1000000+1))
+##intseq.list <- split(intseq, as.integer(1:nrow(intseq)/1000000+1))
+##I1R1R2qName.list <- bplapply(intseq.list, function(intseq.df) {
+##make_miseq_reads(oligo, intseq.df, R1L=args$R1L, R2L=args$R2L)},
+##                             BPPARAM=MulticoreParam(5))
 
-I1R1R2qName.list <- bplapply(intseq.list, function(intseq.df) {
-                                 make_miseq_reads(oligo, intseq.df, R1L=args$R1L, R2L=args$R2L)},
-                             BPPARAM=MulticoreParam(5))
+intseq.list <- split(intseq, 1+1:nrow(intseq)%%nrow(oligo))
+I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
+    {message(i, "\tof\t", length(intseq.list))
+     df <- make_miseq_reads(oligo[i,], intseq.list[[i]],
+                            R1L=args$R1L, R2L=args$R2L)
+     return(df) }
+                            ,BPPARAM=MulticoreParam(5)) 
+
 
 I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
 
