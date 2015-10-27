@@ -88,7 +88,6 @@ get_info_from_database <- function() {
 #' alias,linkerSequence,bcSeq,gender,primer,ltrBit,largeLTRFrag,vectorSeq
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
 sampleInfo <- read.table("sampleInfo.tsv", header=TRUE)
-sampleInfo <- read.table("sampleInfom.tsv", header=TRUE)
 ##stopifnot(nrow(sampleInfo)==1)
 sampleInfo$linkerSequence <- gsub("N", "T", sampleInfo$linkerSequence)
 
