@@ -80,8 +80,8 @@ get_random_loci <- function(sp=Hsapiens, n=20) {
     loci <- sapply(setNames(seq_along(n.chr), names(chrLen)),
                    function(i) {
                        return(as.integer(runif(n.chr[i],
-                                               min = 1000,
-                                               max = chrLen[i]-3000)))
+                                               min = 5000,
+                                               max = chrLen[i]-5000)))
                    })
     
     loci.df <- plyr::ldply(loci, function(L)
@@ -127,7 +127,9 @@ get_sequence_downstream <- function(sp, chr, position, strand, width) {
                            position=position,
                            strand=strand),
                 data.frame(width=width))
-    df <- dplyr::arrange(df, chr, position, strand, width)
+    if( length(width)>1 ) df <- dplyr::arrange(df, chr, position, strand,
+                                               width)
+    
     
     ## downstream along strand
     gr <- flank(GRanges(df$chr, IRanges(df$position, df$position), df$strand),

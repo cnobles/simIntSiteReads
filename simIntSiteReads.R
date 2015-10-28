@@ -119,6 +119,7 @@ oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
 ##                   position=c(52699700, 77440127, 1330529, 153461600, 148889088),
 ##                   strand=c("+", "+", "+", "-", "+") )
 
+message("\nGenerate random sites")
 site <- get_random_loci(sp=Hsapiens, n=as.integer(args$sites*1.2))
 
 checkNbase <- function(site, width=3000) {
@@ -133,12 +134,14 @@ checkNbase <- function(site, width=3000) {
                                          site$position,
                                          "-",
                                          width)
-    Nclose <- grepl('N', seq.plus$seq) | grepl('N', seq.minus$seq)
+    Nclose <- (grepl('N', seq.plus$seq,  ignore.case=TRUE) |
+                   grepl('N', seq.minus$seq,  ignore.case=TRUE) )
     return( Nclose )
 }
 isNClose <- checkNbase(site)
 
 site <- site[!isNClose,]
+stopifnot(!any(checkNbase(site)))
 site <- dplyr::sample_n(site, args$sites, replace=FALSE)
 
 ## get sequence of integration, downstream from the point of integration
@@ -149,18 +152,18 @@ site <- dplyr::sample_n(site, args$sites, replace=FALSE)
 ##width <- sample(200:1000, 100, replace=FALSE)
 width <- c(31:1000)
 
+message("\nGenerate human sequences for sites")
 intseq <- get_sequence_downstream(Hsapiens,
                                   site$chr,
                                   site$position,
                                   site$strand,
                                   width)
 
-as.numeric.factor <- function(x) {seq_along(levels(x))[x]}
 intseq <- dplyr::mutate(intseq,
-                        siteid=as.factor(paste0(chr, strand, position)),
-                        siteid=as.numeric.factor(siteid),
+                        siteid=as.integer(factor(paste0(chr, strand, position))),
                         sampleid=siteid%%nrow(oligo)+1)
 
+message("\nGenerate machine sequences for sites")
 intseq.list <- split(intseq, intseq$sampleid)
 I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
     {message(i, "\tof\t", length(intseq.list))
@@ -174,6 +177,7 @@ I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
 
 I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
 
+message("\nDump sequences to fastq files")
 makeInputFolder(I1R1R2qNamedf, args$outFolder)
 
 
