@@ -80,8 +80,8 @@ get_random_loci <- function(sp=Hsapiens, n=20) {
     loci <- sapply(setNames(seq_along(n.chr), names(chrLen)),
                    function(i) {
                        return(as.integer(runif(n.chr[i],
-                                               min = 1000,
-                                               max = chrLen[i]-3000)))
+                                               min = 5000,
+                                               max = chrLen[i]-5000)))
                    })
     
     loci.df <- plyr::ldply(loci, function(L)
@@ -127,7 +127,9 @@ get_sequence_downstream <- function(sp, chr, position, strand, width) {
                            position=position,
                            strand=strand),
                 data.frame(width=width))
-    df <- dplyr::arrange(df, chr, position, strand, width)
+    if( length(width)>1 ) df <- dplyr::arrange(df, chr, position, strand,
+                                               width)
+    
     
     ## downstream along strand
     gr <- flank(GRanges(df$chr, IRanges(df$position, df$position), df$strand),
@@ -229,11 +231,13 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
     for( pair in pairs ) {
         message("\nWriting ", pair)
         
-        read <- ShortReadQ(
-            DNAStringSet( df[[pair]] ),
-            FastqQuality( sapply(nchar( df[[pair]] ),
-                                 function(i) paste(rep("z",i), collapse="")) ),
-            BStringSet( paste(df$qname, qnameComments[pair])) )
+        readLength <- nchar(df[[pair]])
+        scorez <- paste(rep("z", max(readLength)), collapse="")
+        score <- substring(scorez, 1, readLength) 
+        
+        read <- ShortReadQ(DNAStringSet( df[[pair]] ),
+                           FastqQuality( score ),
+                           BStringSet( paste(df$qname, qnameComments[pair])) )
         
         writeFastq(read,
                    file=file.path(path, "Data", fastqFile[pair]),
@@ -242,7 +246,7 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
     }
     
     ## copy sampleInfo.tsv
-    file.copy(file.path(args$codeDir, "sampleInfo.tsv"),
+    file.copy(file.path(args$codeDir, args$info),
               file.path(path, "sampleInfo.tsv"),
               overwrite=TRUE)
     

@@ -41,7 +41,7 @@ get_args <- function() {
                         default="intSiteSimulation",
                         help="output folder")
     parser$add_argument("-s", "--sites", type="integer", nargs=1,
-                        default=1000,
+                        default=5000,
                         help="number of integration sites")
     parser$add_argument("-l", "--sonicLength", type="integer", nargs=1,
                         default=100,
@@ -52,6 +52,9 @@ get_args <- function() {
     parser$add_argument("-2", "--R2L", type="integer", nargs=1,
                         default=130,
                         help="R2 read length")
+    parser$add_argument("-m", "--info", type="character", nargs=1,
+                        default="sampleInfo.tsv",
+                        help="metadata file, default sampleInfo.tsv")
     parser$add_argument("-g", "--group", type="character", nargs=1,
                         default="intsites_miseq.read",
                         help="number of sonic lengths for each site")
@@ -67,16 +70,16 @@ get_args <- function() {
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
 }
 args <- get_args()
-print(args)
+write.table(t(as.data.frame(args)), col.names=FALSE, quote=FALSE, sep="\t")
 
 libs <- c("RMySQL",
           "dplyr",
           "ggplot2",
           "GenomicRanges",
           "ShortRead",
+          "BiocParallel",
           "BSgenome",
           "distr",
-          "intSiteRetriever",
           sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze))
 null <- suppressMessages(sapply(libs, library, character.only=TRUE))
 
@@ -85,11 +88,11 @@ source(file.path(args$codeDir, "sequencing_error.R"))
 source(file.path(args$codeDir, "width_distribution.R"))
 
 
-#get_info_from_database <- function() {
-#    allSites <- get_sites()
-#    sonicLength <- get_sonicLength()
-#    return( list(site=allSites, sonicLength=sonicLength) )
-#}
+get_info_from_database <- function() {
+    allSites <- get_sites()
+    sonicLength <- get_sonicLength()
+    return( list(site=allSites, sonicLength=sonicLength) )
+}
 ##sitesInfo <- get_info_from_database()
 
 
@@ -97,8 +100,7 @@ source(file.path(args$codeDir, "width_distribution.R"))
 #' @note this is from one line of the sample information file
 #' alias,linkerSequence,bcSeq,gender,primer,ltrBit,largeLTRFrag,vectorSeq
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
-sampleInfo <- read.table("sampleInfo.tsv", header=TRUE)
-stopifnot(nrow(sampleInfo)==1)
+sampleInfo <- read.table(args$info, header=TRUE)
 sampleInfo$linkerSequence <- gsub("N", "T", sampleInfo$linkerSequence)
 
 
@@ -123,10 +125,34 @@ oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
 ##clone3	Clonal 293T cells with known integration at chr19+1330529
 ##clone4	Clonal 293T cells with known integration at chr1-153461600
 ##clone7	Clonal 293T cells with known integration at chr1+148889088
-#site <- data.frame(chr=c("chr1", "chr17", "chr19", "chr1", "chr1"),
-#                   position=c(52699700, 77440127, 1330529, 153461600, 148889088),
-#                   strand=c("+", "+", "+", "-", "+") )
+##site <- data.frame(chr=c("chr1", "chr17", "chr19", "chr1", "chr1"),
+##                   position=c(52699700, 77440127, 1330529, 153461600, 148889088),
+##                   strand=c("+", "+", "+", "-", "+") )
 
+message("\nGenerate random sites")
+site <- get_random_loci(sp=Hsapiens, n=as.integer(args$sites*1.2))
+
+checkNbase <- function(site, width=3000) {
+    ##width <- 5000
+    seq.plus <- get_sequence_downstream(Hsapiens,
+                                        site$chr,
+                                        site$position,
+                                        "+",
+                                        width)
+    seq.minus <- get_sequence_downstream(Hsapiens,
+                                         site$chr,
+                                         site$position,
+                                         "-",
+                                         width)
+    Nclose <- (grepl('N', seq.plus$seq,  ignore.case=TRUE) |
+                   grepl('N', seq.minus$seq,  ignore.case=TRUE) )
+    return( Nclose )
+}
+isNClose <- checkNbase(site)
+
+site <- site[!isNClose,]
+stopifnot(!any(checkNbase(site)))
+site <- dplyr::sample_n(site, args$sites, replace=FALSE)
 
 ## get sequence of integration, downstream from the point of integration
 ##sitesInfo <- get_info_from_database()
@@ -135,12 +161,6 @@ oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
 ##width <- sample(sitesInfo$sonicLength, 100, replace=TRUE)
 #width <- sample(200:1000, 100, replace=FALSE)
 #width <- c(30:1000)
-
-NUMBER_OF_SITES <- 1000
-siteIDs <- seq(1, NUMBER_OF_SITES)
-reference_genome <- get_reference_genome(args$freeze)
-site <- get_random_positions(siteIDs, reference_genome, 'm', number_of_positions=1) 
-site$siteID <- NULL
 
 width <- NULL
 num_reads <- 100
@@ -154,16 +174,34 @@ if (args$width_distribution == "uniform") {
 }
 stopifnot(width != NULL)
 
+message("\nGenerate human sequences for sites")
 intseq <- get_sequence_downstream(Hsapiens,
                                   site$chr,
                                   site$position,
                                   site$strand,
                                   width)
 
-I1R1R2qNamedf <- make_miseq_reads(oligo, intseq, R1L=args$R1L, R2L=args$R2L)
+intseq <- dplyr::mutate(intseq,
+                        siteid=as.integer(factor(paste0(chr, strand, position))),
+                        sampleid=siteid%%nrow(oligo)+1)
+
+message("\nGenerate machine sequences for sites")
+intseq.list <- split(intseq, intseq$sampleid)
+I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
+    {message(i, "\tof\t", length(intseq.list))
+     df <- make_miseq_reads(oligo[i,],
+                            intseq.list[[i]],
+                            R1L=args$R1L,
+                            R2L=args$R2L)
+     return(df) }
+                            ,BPPARAM=MulticoreParam(5)) 
+
+
+I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
 
 I1R1R2qNamedf <- generate_seq_error(I1R1R2qNamedf, args$error_percentage)
 
+message("\nDump sequences to fastq files")
 makeInputFolder(I1R1R2qNamedf, args$outFolder)
 
 
