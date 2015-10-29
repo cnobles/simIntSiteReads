@@ -38,12 +38,12 @@ get_args <- function() {
 args <- get_args()
 print(args)
 
-libs <- c("plyr",
+libs <- c("stringr",
+          "plyr",
           "dplyr",
           "GenomicRanges",
-          "ShortRead",
-          "stringr")
-null <- suppressMessages(sapply(libs, library, character.only=TRUE))
+          "ShortRead")
+null <- suppressMessages(sapply(libs, require, character.only=TRUE))
 
 options(stringsAsFactors=FALSE)
 options(dplyr.width = Inf)
@@ -71,6 +71,14 @@ get_metadata <- function() {
     return(df)
 }
 metadata <- get_metadata()    
+
+get_machine_file <- function(dir="Data") {
+    fastqFiles <- list.files(path=dir, pattern="fastq.gz", full.names=TRUE)
+    I1File <-  grep("I1", fastqFiles, value=TRUE)
+    R1File <-  grep("R1", fastqFiles, value=TRUE)
+    R2File <-  grep("R2", fastqFiles, value=TRUE)
+}
+
 
 
 #' Load truth from qnames in fastqfile
