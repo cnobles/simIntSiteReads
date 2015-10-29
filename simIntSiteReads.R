@@ -88,15 +88,6 @@ source(file.path(args$codeDir, "sequencing_error.R"))
 source(file.path(args$codeDir, "width_distribution.R"))
 
 
-get_info_from_database <- function() {
-    allSites <- get_sites()
-    sonicLength <- get_sonicLength()
-    return( list(site=allSites, sonicLength=sonicLength) )
-}
-##sitesInfo <- get_info_from_database()
-
-
-
 #' @note this is from one line of the sample information file
 #' alias,linkerSequence,bcSeq,gender,primer,ltrBit,largeLTRFrag,vectorSeq
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
@@ -133,7 +124,6 @@ message("\nGenerate random sites")
 site <- get_random_loci(sp=Hsapiens, n=as.integer(args$sites*1.2))
 
 checkNbase <- function(site, width=3000) {
-    ##width <- 5000
     seq.plus <- get_sequence_downstream(Hsapiens,
                                         site$chr,
                                         site$position,
@@ -154,13 +144,8 @@ site <- site[!isNClose,]
 stopifnot(!any(checkNbase(site)))
 site <- dplyr::sample_n(site, args$sites, replace=FALSE)
 
-## get sequence of integration, downstream from the point of integration
-##sitesInfo <- get_info_from_database()
-##site <- tail(head(sitesInfo$site, 3), 1)
-##site <- sitesInfo$site[3,]
-##width <- sample(sitesInfo$sonicLength, 100, replace=TRUE)
-#width <- sample(200:1000, 100, replace=FALSE)
-#width <- c(30:1000)
+##width <- sample(200:1000, 100, replace=FALSE)
+##width <- c(30:1000)
 
 width <- NULL
 num_reads <- 100
@@ -185,6 +170,7 @@ intseq <- dplyr::mutate(intseq,
                         siteid=as.integer(factor(paste0(chr, strand, position))),
                         sampleid=siteid%%nrow(oligo)+1)
 
+
 message("\nGenerate machine sequences for sites")
 intseq.list <- split(intseq, intseq$sampleid)
 I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
@@ -204,4 +190,20 @@ I1R1R2qNamedf <- generate_seq_error(I1R1R2qNamedf, args$error_percentage)
 message("\nDump sequences to fastq files")
 makeInputFolder(I1R1R2qNamedf, args$outFolder)
 
+
+message("\nDump truth to bed file")
+truth.bed <- intseq %>%
+    dplyr::mutate(
+        breakpoint=ifelse(strand=="+", position+width, position-width),
+        start=pmin(position, breakpoint),
+        end=pmax(position, breakpoint),
+        note="sim",
+        score=500) %>% 
+        arrange(chr, position, strand, breakpoint) %>% 
+            select(chr, start, end, note, score, strand)
+
+
+write.table(truth.bed, file=file.path(args$outFolder, "truth.bed"),
+            row.names=FALSE, col.names=FALSE, sep="\t", quote=FALSE)
+message(file.path(args$outFolder, "truth.bed"))
 
