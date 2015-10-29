@@ -151,7 +151,7 @@ get_sequence_downstream <- function(sp, chr, position, strand, width) {
 #' @param oligo oligo information
 #' @param intseq integration information, chr, start, strand, width, seq
 #'               the sequences are human genome only 
-#' @return dataframe of R1, R2, I1, qname character vectors
+#' @return dataframe with 4 columns: R1, R2, I1, qname character vectors
 #' @note the read names are to be
 #'       R1: @M03249:(#chr):(#strand):(#start):(#width):(#index) 1:N:0:0
 #'       R2: @M03249:(#chr):(#strand):(#start):(#width):(#index) 2:N:0:0

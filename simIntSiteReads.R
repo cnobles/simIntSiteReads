@@ -61,21 +61,31 @@ get_args <- function() {
     parser$add_argument("-c", "--codeDir", type="character", nargs=1,
                         default=codeDir,
                         help="Directory of code")
+    parser$add_argument("-e", "--error_percentage", type="integer", nargs=1,
+            default=0, help="percent of nucleotides in reads with substitution uniform random errors")
+
+    parser$add_argument("-w", "--width_distribution", type="character", nargs=1,
+            default="uniform", choices=c("uniform", "maxwell_boltzmann"), help="molecule width distribution for reads")
+
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
 }
 args <- get_args()
 write.table(t(as.data.frame(args)), col.names=FALSE, quote=FALSE, sep="\t")
 
 libs <- c("RMySQL",
+          "dplyr",
           "ggplot2",
           "GenomicRanges",
           "ShortRead",
           "BiocParallel",
           "BSgenome",
+          "distr",
           sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze))
 null <- suppressMessages(sapply(libs, library, character.only=TRUE))
 
 source(file.path(args$codeDir, "simIntSiteReads_func.R"))
+source(file.path(args$codeDir, "sequencing_error.R"))
+source(file.path(args$codeDir, "width_distribution.R"))
 
 
 get_info_from_database <- function() {
@@ -149,8 +159,20 @@ site <- dplyr::sample_n(site, args$sites, replace=FALSE)
 ##site <- tail(head(sitesInfo$site, 3), 1)
 ##site <- sitesInfo$site[3,]
 ##width <- sample(sitesInfo$sonicLength, 100, replace=TRUE)
-##width <- sample(200:1000, 100, replace=FALSE)
-width <- c(31:1000)
+#width <- sample(200:1000, 100, replace=FALSE)
+#width <- c(30:1000)
+
+width <- NULL
+num_reads <- 100
+if (args$width_distribution == "uniform") {
+    min_molecule_len <- 30
+    max_molecule_len <- 1000
+    width <- uniform_width_distribution(num_reads, min_molecule_len, max_molecule_len)
+} else if (args$width_distribution == "maxwell_boltzmann") {
+    mean_molecule_len <- 100
+    width <- maxwell_boltzmann_width_distribution(num_reads, mean_molecule_len)
+}
+stopifnot(width != NULL)
 
 message("\nGenerate human sequences for sites")
 intseq <- get_sequence_downstream(Hsapiens,
@@ -176,6 +198,8 @@ I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
 
 
 I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
+
+I1R1R2qNamedf <- generate_seq_error(I1R1R2qNamedf, args$error_percentage)
 
 message("\nDump sequences to fastq files")
 makeInputFolder(I1R1R2qNamedf, args$outFolder)
