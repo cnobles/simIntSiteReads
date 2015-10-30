@@ -17,7 +17,6 @@ get_sonicLength <- function() {
 }
 
 
-
 #' get all sites and sonic abundance from the database
 #' @param implied by ~/.my.cnf and args$group
 #' @return data.frame(chr, pos, strand, estAbun)

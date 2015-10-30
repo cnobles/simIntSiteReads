@@ -41,6 +41,7 @@ print(args)
 libs <- c("stringr",
           "plyr",
           "dplyr",
+          "RMySQL",
           "GenomicRanges",
           "ShortRead")
 null <- suppressMessages(sapply(libs, require, character.only=TRUE))
@@ -290,9 +291,76 @@ call.site.stat <-c(
 
 
 print(as.data.frame(call.site.stat))
+message("\nCaller site stat written callstat.txt" )
 write.table(as.data.frame(call.site.stat), file="callstat.txt",
             quote=FALSE, sep="\t", col.name=FALSE)
+
+truth.site.call <- merge(cbind(truth.site, queryHits=1:nrow(truth.site)),
+                         all.site.ovl,
+                         by="queryHits", all.x=TRUE)
+message("\nTruth site called written truth.site.call.txt")
+message("awk '$NF~/NA/ && $(NF-1)~/NA/' truth.site.call.txt ## not recovered sites")
+write.table(truth.site.call, file="truth.site.call.txt",
+            quote=FALSE, sep="\t", col.name=TRUE, row.name=FALSE)
+
 q()
+
+get_repeakMasker <- function(freeze="hg18") {
+    
+    connect2UCSC <- function(freeze="hg18") {
+        junk <- sapply(dbListConnections(MySQL()), dbDisconnect)
+        dbConn <- dbConnect(MySQL(),
+                            host="genome-mysql.cse.ucsc.edu",
+                            dbname=freeze, 
+                            username="genome")
+        return(dbConn)    
+    }
+    dbConn <- connect2UCSC()
+    
+    get_repeakMasker_tab <- function(conn=dbConn) {
+        stopifnot(dbGetQuery(conn, "select 1")==1)
+        freeze.tab <- dbGetQuery(conn, "SHOW TABLES")
+        rmsk <- grep("chr[0-9XY]*_rmsk$", freeze.tab[,1], value=TRUE)
+        return(rmsk)
+    }
+    
+    rmsk.tab <- get_repeakMasker_tab(dbConn)
+    
+    df <- plyr::ldply(rmsk.tab, function(tab)
+        {
+            sql <- sprintf("SELECT genoName, genoStart, genoEnd, genoLeft, strand FROM %s", tab)
+            message(sql)
+            suppressWarnings(dbGetQuery(dbConn, sql))
+        } )
+    
+    colnames(df) <- c("chr", "start", "end", "left", "strand")
+    return(df)
+}
+rmsk <- get_repeakMasker()
+rmsk.gr <- makeGRangesFromDataFrame(rmsk,
+                                    start.field="start",
+                                    end="end",
+                                    strand.field="strand",
+                                    keep.extra.columns=TRUE)
+
+
+truth.site.call <- read.table("truth.site.call.txt", header=TRUE)
+truth.site.call.gr <- makeGRangesFromDataFrame(truth.site.call,
+                                               start.field="position",
+                                               end="position",
+                                               strand.field="strand",
+                                               keep.extra.columns=TRUE)
+
+findOverlaps(truth.site.call.gr, rmsk.gr, maxgap=args$err)
+
+findOverlaps(subset(truth.site.call.gr, is.na(subjectHits.uniq) & is.na(subjectHits.multi)),
+             subset(rmsk.gr, width>100),
+             maxgap=args$err,
+             ignore.strand=TRUE)
+
+
+
+
 
 res <- plyr::rbind.fill(load_uniqueSites_from_RData(),
                         load_multiSites_from_RData())
