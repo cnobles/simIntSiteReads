@@ -31,7 +31,7 @@ get_args <- function() {
                         default=".",
                         help="Directory of code")
     parser$add_argument("-e", "--err", type="integer", nargs=1,
-                        default=3,
+                        default=5,
                         help="tolerance for alignment")
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
 }
@@ -47,6 +47,11 @@ null <- suppressMessages(sapply(libs, require, character.only=TRUE))
 
 options(stringsAsFactors=FALSE)
 options(dplyr.width = Inf)
+#' increase output width to console width
+wideScreen <- function(howWide=as.numeric(strsplit(system('stty size', intern=T), ' ')[[1]])[2]) {
+   options(width=as.integer(howWide))
+}
+wideScreen()
 
 get_metadata <- function() {
     df1 <- read.table(file.path(args$workDir, "sampleInfo.tsv"), header=TRUE)
@@ -70,15 +75,20 @@ get_metadata <- function() {
     
     return(df)
 }
-metadata <- get_metadata()    
+##metadata <- get_metadata()    
 
+#' get the original machine undemultiplexed I1, R1, R2 fastq.gz files
 get_machine_file <- function(dir="Data") {
     fastqFiles <- list.files(path=dir, pattern="fastq.gz", full.names=TRUE)
     I1File <-  grep("I1", fastqFiles, value=TRUE)
     R1File <-  grep("R1", fastqFiles, value=TRUE)
     R2File <-  grep("R2", fastqFiles, value=TRUE)
+    stopifnot(length(I1File)==1)
+    stopifnot(length(R1File)==1)
+    stopifnot(length(R2File)==1)
+    return(data.frame(uI1=I1File, uR1=R1File, uR2=R2File) )
 }
-
+##get_machine_file(dir=file.path(args$workDir,"Data"))
 
 
 #' Load truth from qnames in fastqfile
@@ -91,9 +101,12 @@ get_machine_file <- function(dir="Data") {
 load_truth_from_fastq <- function(meta=metadata) {
     stopifnot(c("R1fastq","alias") %in% colnames(meta))
     
-    truth <- plyr::ldply(seq_along(nrow(meta)), function(i)
+    ##truth <- plyr::ldply(seq_along(nrow(meta)), function(i)
+    truth <- plyr::ldply(seq_along(nrow(meta))[1], function(i)
         {
-            qname <- as.character(ShortRead::id(readFastq(meta$R1fastq[i])))
+            ##qname <- as.character(ShortRead::id(readFastq(meta$R1fastq[i])))
+            message("Reading ", meta$uI1[i])
+            qname <- as.character(ShortRead::id(readFastq(meta$uI1[i])))
             info <- stringr::str_match(qname,
                                        "M03249:1:000-SIM(.*):1:1:(\\d+):(\\d+)")
             pos <- info[,2]
@@ -101,7 +114,8 @@ load_truth_from_fastq <- function(meta=metadata) {
             
             info <- cbind(info, pos2)
             
-            truth <- data.frame(alias=meta[i]$alias,
+            ##truth <- data.frame(alias=meta$alias[i],
+            truth <- data.frame(
                                 qname =    as.character( info[,1] ),
                                 qid =      as.integer(   info[,4] ),
                                 chr =      as.character( info[,6] ),
@@ -116,7 +130,7 @@ load_truth_from_fastq <- function(meta=metadata) {
                                        truth$position+truth$width,
                                        truth$position-truth$width)
             
-            truth$qname <- sub("^M.*-", paste0(meta$alias[i],'%'), truth$qname)
+            ##truth$qname <- sub("^M.*-", paste0(meta$alias[i],'%'), truth$qname)
             return(truth)
         } )
     
@@ -136,6 +150,7 @@ load_truth_from_fastq <- function(meta=metadata) {
     stopifnot(c("sites", "allSites") %in% colnames(meta))
     stopifnot(nrow(meta)==1)
     
+    message("Loading\t", meta$sites, "\t", meta$allSites) 
     sites.final <- get(load(meta$sites))
     allSites <-    get(load(meta$allSites))
     
@@ -182,6 +197,7 @@ load_uniqueSites_from_RData <- function(meta=metadata) {
 .load_multiSites_from_RData <- function(meta=metadata) {
     stopifnot(c("alias", "multihit") %in% colnames(meta))
     stopifnot(nrow(meta)==1)
+    message("Loading\t", meta$multihit)
     multi <- get(load(meta$multihit))
     
     multiAln <- multi$unclusteredMultihits
@@ -189,7 +205,7 @@ load_uniqueSites_from_RData <- function(meta=metadata) {
     fromCluster <- findOverlaps(multiAln,
                                 multi$clusteredMultihitPositions,
                                 ignore.strand=FALSE,
-                                maxgap=5,
+                                maxgap=args$err,
                                 select="first")
     
     multiAln$multihitID <- fromCluster
@@ -221,7 +237,63 @@ load_multiSites_from_RData <- function(meta=metadata) {
     return(sites)
 }
 
+metadata <- cbind(get_metadata(),
+                  get_machine_file(dir=file.path(args$workDir,"Data")))
+
 truth <- load_truth_from_fastq(metadata)
+
+truth.site <- truth %>%
+              dplyr::select(chr, strand, position) %>%
+              dplyr::distinct()
+truth.site.gr <-  makeGRangesFromDataFrame(truth.site,
+                                           start.field="position",
+                                           end="position",
+                                           strand.field="strand")
+    
+res.uniq <- load_uniqueSites_from_RData()
+res.uniq.site <- res.uniq %>%
+                 dplyr::select(chr, strand, position, siteID, multihitID) %>%
+                 dplyr::distinct()
+res.uniq.site.gr <- makeGRangesFromDataFrame(res.uniq.site,
+                                             start.field="position",
+                                             end="position",
+                                             strand.field="strand",
+                                             keep.extra.columns=TRUE)
+
+uniq.site.ovl <- findOverlaps(truth.site.gr, res.uniq.site.gr, maxgap=args$err)
+
+res.multi <- load_multiSites_from_RData()
+res.multi.site <- res.multi %>%
+                  dplyr::select(chr, strand, position, siteID, multihitID) %>%
+                  dplyr::distinct()
+res.multi.site.gr <- makeGRangesFromDataFrame(res.multi.site,
+                                              start.field="position",
+                                              end="position",
+                                              strand.field="strand",
+                                              keep.extra.columns=TRUE)
+multi.site.ovl <- findOverlaps(truth.site.gr, res.multi.site.gr, maxgap=args$err)
+
+all.site.ovl <- merge(as.data.frame(uniq.site.ovl), as.data.frame(multi.site.ovl),
+                      by="queryHits",
+                      suffixes=c(".uniq", ".multi"),
+                      all.x=TRUE, all.y=TRUE)
+
+call.site.stat <-c(
+    "all.sim"= nrow(truth.site),
+    "found.any"=length(unique(all.site.ovl$queryHits)),
+    "found.uniq"=length(unique(subset(all.site.ovl, !is.na(subjectHits.uniq))$queryHits)),
+    "found.uniq.only"=length(unique(subset(all.site.ovl, !is.na(subjectHits.uniq) &  is.na(subjectHits.multi))$queryHits)),
+    "found.multi"=length(unique(subset(all.site.ovl, !is.na(subjectHits.multi))$queryHits)),
+    "found.multi.only"=length(unique(subset(all.site.ovl, !is.na(subjectHits.multi) & is.na(subjectHits.uniq)))$queryHits),
+    "found.both"=length(unique(subset(all.site.ovl, !is.na(subjectHits.multi) & !is.na(subjectHits.uniq))$queryHits))
+    )
+
+
+print(as.data.frame(call.site.stat))
+write.table(as.data.frame(call.site.stat), file="callstat.txt",
+            quote=FALSE, sep="\t", col.name=FALSE)
+q()
+
 res <- plyr::rbind.fill(load_uniqueSites_from_RData(),
                         load_multiSites_from_RData())
 
