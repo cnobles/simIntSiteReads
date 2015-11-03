@@ -233,8 +233,15 @@ load_uniqueSites_from_RData <- function(meta=metadata) {
     return(msite)
 }
 load_multiSites_from_RData <- function(meta=metadata) {
+    ##sites <- plyr::ldply(1:nrow(meta), function(i)
+    ##    .load_multiSites_from_RData(meta[i,]) )
+    ##return(sites)
     sites <- plyr::ldply(1:nrow(meta), function(i)
-        .load_multiSites_from_RData(meta[i,]) )
+        {
+            i.df <- try(.load_multiSites_from_RData(meta[i,]))
+            if( class(i.df) == "try-error" ) i.df <- data.frame()
+            return(i.df)
+        } )
     return(sites)
 }
 

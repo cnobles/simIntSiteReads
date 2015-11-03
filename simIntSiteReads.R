@@ -63,11 +63,15 @@ get_args <- function() {
                         help="Directory of code")
     parser$add_argument("-e", "--error_percentage", type="integer", nargs=1,
             default=0, help="percent of nucleotides in reads with substitution uniform random errors")
-
+    
     parser$add_argument("-w", "--width_distribution", type="character", nargs=1,
-            default="uniform", choices=c("uniform", "maxwell_boltzmann"), help="molecule width distribution for reads")
-
+                        default="uniform", choices=c("uniform", "maxwell_boltzmann"),
+                        help="molecule width distribution for reads")
+    
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
+    args$seed <- 123457
+    
+    return(args)
 }
 args <- get_args()
 write.table(t(as.data.frame(args)), col.names=FALSE, quote=FALSE, sep="\t")
@@ -87,11 +91,13 @@ source(file.path(args$codeDir, "simIntSiteReads_func.R"))
 source(file.path(args$codeDir, "sequencing_error.R"))
 source(file.path(args$codeDir, "width_distribution.R"))
 
+set.seed(args$seed)
+
 
 #' @note this is from one line of the sample information file
 #' alias,linkerSequence,bcSeq,gender,primer,ltrBit,largeLTRFrag,vectorSeq
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
-sampleInfo <- read.table(args$info, header=TRUE)
+sampleInfo <- read.table(file.path(args$codeDir, args$info), header=TRUE)
 sampleInfo$linkerSequence <- gsub("N", "T", sampleInfo$linkerSequence)
 
 
