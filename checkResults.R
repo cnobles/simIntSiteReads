@@ -43,7 +43,8 @@ libs <- c("stringr",
           "dplyr",
           "RMySQL",
           "GenomicRanges",
-          "ShortRead")
+          "ShortRead",
+          "BiocParallel")
 null <- suppressMessages(sapply(libs, require, character.only=TRUE))
 
 options(stringsAsFactors=FALSE)
@@ -188,10 +189,15 @@ load_truth_from_fastq <- function(meta=metadata) {
     return(sites)
 }
 load_uniqueSites_from_RData <- function(meta=metadata) {
-    sites <- plyr::ldply(1:nrow(meta), function(i)
-        .load_uniqueSites_from_RData(meta[i,]) )
-    return(sites)
-}
+    sites.l <- bplapply(1:nrow(meta), function(i)
+                    {
+                        i.df <- try(.load_uniqueSites_from_RData(meta[i,]))
+                        if( class(i.df) == "try-error" ) i.df <- data.frame()
+                        return(i.df)
+                    }
+                        ,BPPARAM=MulticoreParam(5))
+    sites <- dplyr::rbind_all(sites.l)
+}   
 #'
 #'
 #' 
@@ -232,18 +238,28 @@ load_uniqueSites_from_RData <- function(meta=metadata) {
     
     return(msite)
 }
+##load_multiSites_from_RData <- function(meta=metadata) {
+##    ##sites <- plyr::ldply(1:nrow(meta), function(i)
+##    ##    .load_multiSites_from_RData(meta[i,]) )
+##    ##return(sites)
+##    sites <- plyr::ldply(1:nrow(meta), function(i)
+##        {
+##            i.df <- try(.load_multiSites_from_RData(meta[i,]))
+##            if( class(i.df) == "try-error" ) i.df <- data.frame()
+##            return(i.df)
+##        } )
+##    return(sites)
+##}
 load_multiSites_from_RData <- function(meta=metadata) {
-    ##sites <- plyr::ldply(1:nrow(meta), function(i)
-    ##    .load_multiSites_from_RData(meta[i,]) )
-    ##return(sites)
-    sites <- plyr::ldply(1:nrow(meta), function(i)
-        {
-            i.df <- try(.load_multiSites_from_RData(meta[i,]))
-            if( class(i.df) == "try-error" ) i.df <- data.frame()
-            return(i.df)
-        } )
-    return(sites)
-}
+    sites.l <- bplapply(1:nrow(meta), function(i)
+                    {
+                        i.df <- try(.load_multiSites_from_RData(meta[i,]))
+                        if( class(i.df) == "try-error" ) i.df <- data.frame()
+                        return(i.df)
+                    }
+                        ,BPPARAM=MulticoreParam(5))
+    sites <- dplyr::rbind_all(sites.l)
+}   
 
 metadata <- cbind(get_metadata(),
                   get_machine_file(dir=file.path(args$workDir,"Data")))
