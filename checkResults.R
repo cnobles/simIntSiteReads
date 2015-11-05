@@ -33,6 +33,9 @@ get_args <- function() {
     parser$add_argument("-e", "--err", type="integer", nargs=1,
                         default=5,
                         help="tolerance for alignment")
+    parser$add_argument("-n", "--nproc", type="integer", nargs=1,
+                        default=5,
+                        help="tolerance for alignment")
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
 }
 args <- get_args()
@@ -195,7 +198,7 @@ load_uniqueSites_from_RData <- function(meta=metadata) {
                         if( class(i.df) == "try-error" ) i.df <- data.frame()
                         return(i.df)
                     }
-                        ,BPPARAM=MulticoreParam(5))
+                        ,BPPARAM=MulticoreParam(args$nproc))
     sites <- dplyr::rbind_all(sites.l)
 }   
 #'
@@ -238,18 +241,6 @@ load_uniqueSites_from_RData <- function(meta=metadata) {
     
     return(msite)
 }
-##load_multiSites_from_RData <- function(meta=metadata) {
-##    ##sites <- plyr::ldply(1:nrow(meta), function(i)
-##    ##    .load_multiSites_from_RData(meta[i,]) )
-##    ##return(sites)
-##    sites <- plyr::ldply(1:nrow(meta), function(i)
-##        {
-##            i.df <- try(.load_multiSites_from_RData(meta[i,]))
-##            if( class(i.df) == "try-error" ) i.df <- data.frame()
-##            return(i.df)
-##        } )
-##    return(sites)
-##}
 load_multiSites_from_RData <- function(meta=metadata) {
     sites.l <- bplapply(1:nrow(meta), function(i)
                     {
@@ -257,7 +248,7 @@ load_multiSites_from_RData <- function(meta=metadata) {
                         if( class(i.df) == "try-error" ) i.df <- data.frame()
                         return(i.df)
                     }
-                        ,BPPARAM=MulticoreParam(5))
+                        ,BPPARAM=MulticoreParam(args$nproc))
     sites <- dplyr::rbind_all(sites.l)
 }   
 
@@ -302,6 +293,23 @@ all.site.ovl <- merge(as.data.frame(uniq.site.ovl), as.data.frame(multi.site.ovl
                       suffixes=c(".uniq", ".multi"),
                       all.x=TRUE, all.y=TRUE)
 
+save.image(file = "debug.checkResults.RData")
+
+
+## find false positives
+uniq.resIntruth.ovl <- findOverlaps(res.uniq.site.gr,
+                                    truth.site.gr,
+                                    maxgap=args$err)
+res.uniq.site.fp.gr <- res.uniq.site.gr[-queryHits(uniq.resIntruth.ovl)]
+
+
+res.multi.site.grl <- split(res.multi.site.gr, res.multi.site.gr$multihitID)
+multi.resIntruth.ovl <- findOverlaps(res.multi.site.grl,
+                                     truth.site.gr,
+                                     maxgap=args$err)
+res.multi.site.fp.grl <- res.multi.site.grl[-queryHits(multi.resIntruth.ovl)]
+
+
 call.site.stat <-c(
     "all.sim"= nrow(truth.site),
     "found.any"=length(unique(all.site.ovl$queryHits)),
@@ -309,7 +317,9 @@ call.site.stat <-c(
     "found.uniq.only"=length(unique(subset(all.site.ovl, !is.na(subjectHits.uniq) &  is.na(subjectHits.multi))$queryHits)),
     "found.multi"=length(unique(subset(all.site.ovl, !is.na(subjectHits.multi))$queryHits)),
     "found.multi.only"=length(unique(subset(all.site.ovl, !is.na(subjectHits.multi) & is.na(subjectHits.uniq)))$queryHits),
-    "found.both"=length(unique(subset(all.site.ovl, !is.na(subjectHits.multi) & !is.na(subjectHits.uniq))$queryHits))
+    "found.both"=length(unique(subset(all.site.ovl, !is.na(subjectHits.multi) & !is.na(subjectHits.uniq))$queryHits)),
+    "falseP.uniq"=length(res.uniq.site.fp.gr),
+    "falseP.multi"=length(res.multi.site.fp.grl)
     )
 
 
