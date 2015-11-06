@@ -1,4 +1,3 @@
-library(stringr)
 
 #' introduce sequencing error in reads
 #' @param miseq_reads dataframe with 4 columns: R1, R2, I1, qname character vectors

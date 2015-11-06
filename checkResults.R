@@ -395,10 +395,13 @@ findOverlaps(subset(truth.site.call.gr, is.na(subjectHits.uniq) & is.na(subjectH
 
 
 
-res <- plyr::rbind.fill(load_uniqueSites_from_RData(),
+res.all <- plyr::rbind.fill(load_uniqueSites_from_RData(),
                         load_multiSites_from_RData())
 
-compr <- merge(truth, res, by=c("alias", "qname"), all.x=TRUE)
+res.all <- plyr::rbind.fill(res.uniq,
+                            res.multi)
+
+compr <- merge(truth, res.all, by=c("alias", "qname"), all.x=TRUE, all.y=TRUE)
 
 is_good_hit <- function(x, err=0) {
     is.good <- with(x, 

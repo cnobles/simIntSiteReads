@@ -76,7 +76,8 @@ get_args <- function() {
 args <- get_args()
 write.table(t(as.data.frame(args)), col.names=FALSE, quote=FALSE, sep="\t")
 
-libs <- c("RMySQL",
+libs <- c("stringr",
+          "RMySQL",
           "dplyr",
           "ggplot2",
           "GenomicRanges",
@@ -192,6 +193,10 @@ I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
 I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
 
 I1R1R2qNamedf <- generate_seq_error(I1R1R2qNamedf, args$error_percentage)
+
+## fix qname qid
+I1R1R2qNamedf$qname <- sub(":\\d+$", "", I1R1R2qNamedf$qname) 
+I1R1R2qNamedf$qname <- paste0(I1R1R2qNamedf$qname, ":", 1:nrow(I1R1R2qNamedf))
 
 message("\nDump sequences to fastq files")
 makeInputFolder(I1R1R2qNamedf, args$outFolder)
