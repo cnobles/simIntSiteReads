@@ -79,6 +79,7 @@ write.table(t(as.data.frame(args)), col.names=FALSE, quote=FALSE, sep="\t")
 libs <- c("stringr",
           "RMySQL",
           "dplyr",
+          "data.table",
           "ggplot2",
           "GenomicRanges",
           "ShortRead",
@@ -94,6 +95,7 @@ source(file.path(args$codeDir, "width_distribution.R"))
 
 set.seed(args$seed)
 
+options(dplyr.width = Inf)
 
 #' @note this is from one line of the sample information file
 #' alias,linkerSequence,bcSeq,gender,primer,ltrBit,largeLTRFrag,vectorSeq
@@ -142,7 +144,7 @@ checkNbase <- function(site, width=3000) {
                                          "-",
                                          width)
     Nclose <- (grepl('N', seq.plus$seq,  ignore.case=TRUE) |
-                   grepl('N', seq.minus$seq,  ignore.case=TRUE) )
+               grepl('N', seq.minus$seq,  ignore.case=TRUE) )
     return( Nclose )
 }
 isNClose <- checkNbase(site)
@@ -154,24 +156,22 @@ site <- dplyr::sample_n(site, args$sites, replace=FALSE)
 ##width <- sample(200:1000, 100, replace=FALSE)
 ##width <- c(30:1000)
 
-width <- NULL
-num_reads <- 100
-if (args$width_distribution == "uniform") {
-    min_molecule_len <- 30
-    max_molecule_len <- 1000
-    width <- uniform_width_distribution(num_reads, min_molecule_len, max_molecule_len)
-} else if (args$width_distribution == "maxwell_boltzmann") {
-    mean_molecule_len <- 100
-    width <- maxwell_boltzmann_width_distribution(num_reads, mean_molecule_len)
-}
-stopifnot(width != NULL)
+site <- as.data.table(site)
+pos <- site[,
+            data.frame(chr,
+                       position,
+                       strand,
+                       ##sort(maxwell_boltzmann_width_distribution(args$sonicLength, 100))
+                       width=sort(uniform_width_distribution(args$sonicLength, 31, 1000))),
+            1:nrow(site)]
+
 
 message("\nGenerate human sequences for sites")
 intseq <- get_sequence_downstream(Hsapiens,
-                                  site$chr,
-                                  site$position,
-                                  site$strand,
-                                  width)
+                                  pos$chr,
+                                  pos$position,
+                                  pos$strand,
+                                  pos$width)
 
 intseq <- dplyr::mutate(intseq,
                         siteid=as.integer(factor(paste0(chr, strand, position))),
@@ -186,17 +186,19 @@ I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
                             intseq.list[[i]],
                             R1L=args$R1L,
                             R2L=args$R2L)
+     df <- generate_seq_error(df, args$error_percentage)
      return(df) }
-                            ,BPPARAM=MulticoreParam(5)) 
+                             ,BPPARAM=MulticoreParam(5)) 
 
 
 I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
 
-I1R1R2qNamedf <- generate_seq_error(I1R1R2qNamedf, args$error_percentage)
+##I1R1R2qNamedf <- generate_seq_error(I1R1R2qNamedf, args$error_percentage)
 
 ## fix qname qid
-I1R1R2qNamedf$qname <- sub(":\\d+$", "", I1R1R2qNamedf$qname) 
-I1R1R2qNamedf$qname <- paste0(I1R1R2qNamedf$qname, ":", 1:nrow(I1R1R2qNamedf))
+I1R1R2qNamedf <- (I1R1R2qNamedf %>%
+                  dplyr::mutate(qname=sub(":\\d+$", "", qname),
+                                qname=paste0(qname, ":", 1:n())))
 
 message("\nDump sequences to fastq files")
 makeInputFolder(I1R1R2qNamedf, args$outFolder)

@@ -121,14 +121,18 @@ get_sequence_downstream <- function(sp, chr, position, strand, width) {
     stopifnot( class(sp) == "BSgenome" )
     options(stringsAsFactors=FALSE)
     
-    ## expand width
-    df <- merge(data.frame(chr=chr,
-                           position=position,
-                           strand=strand),
-                data.frame(width=width))
-    if( length(width)>1 ) df <- dplyr::arrange(df, chr, position, strand,
-                                               width)
-    
+    ## expand width if lengthes are not same
+    if ( length(width) != length(chr) ) {
+        df <- merge(data.frame(chr=chr,
+                               position=position,
+                               strand=strand),
+                    data.frame(width=width))
+    } else {
+        df <- data.frame(chr=chr,
+                         position=position,
+                         strand=strand,
+                         width=width)
+    }
     
     ## downstream along strand
     gr <- flank(GRanges(df$chr, IRanges(df$position, df$position), df$strand),
