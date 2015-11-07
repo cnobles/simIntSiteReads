@@ -47,7 +47,8 @@ libs <- c("stringr",
           "RMySQL",
           "GenomicRanges",
           "ShortRead",
-          "BiocParallel")
+          "BiocParallel",
+          "ggplot2")
 null <- suppressMessages(sapply(libs, require, character.only=TRUE))
 
 options(stringsAsFactors=FALSE)
@@ -252,10 +253,14 @@ load_multiSites_from_RData <- function(meta=metadata) {
     sites <- dplyr::rbind_all(sites.l)
 }   
 
+#### load data, truth and results ####
+#### site level comparison ####
+
 metadata <- cbind(get_metadata(),
                   get_machine_file(dir=file.path(args$workDir,"Data")))
 
 truth <- load_truth_from_fastq(metadata)
+stopifnot(!any(duplicated(truth$qid)))
 
 truth.site <- truth %>%
               dplyr::select(chr, strand, position) %>%
@@ -336,6 +341,84 @@ message("awk '$NF~/NA/ && $(NF-1)~/NA/' truth.site.call.txt ## not recovered sit
 write.table(truth.site.call, file="truth.site.call.txt",
             quote=FALSE, sep="\t", col.name=TRUE, row.name=FALSE)
 
+save.image(file = "debug.checkResults.RData")
+
+
+#### reads level comparison ####
+
+res.all <- dplyr::rbind_list(res.uniq, res.multi)
+stopifnot(all(res.all$qid %in% truth$qid))
+
+compr <- merge(truth, res.all, by=c("qid"), all.x=TRUE)
+
+is_good_hit <- function(x, err=3) {
+    is.good <- with(x, 
+                    chr.x==chr.y &
+                        strand.x==strand.y &
+                            abs(position.x-position.y)<=err &
+                                abs(breakpoint.x-breakpoint.y)<=err )
+    is.good[is.na(is.good)] <- FALSE
+    return(is.good)
+}
+
+compr$hit <- is_good_hit(compr, args$err)
+
+compr <- (dplyr::group_by(compr, qid) %>%
+          dplyr::mutate(nAln=sum(!is.na(chr.y)),
+                        anyHit=any(hit)) )
+
+## reads aligned, not necessarily correct
+reads.aligned <- (dplyr::filter(compr, nAln>0) %>%
+                  dplyr::select(qid) %>%
+                  dplyr::distinct() %>%
+                  nrow())
+
+## reads aligned correctly
+reads.aligned.right <- (dplyr::filter(compr, hit) %>%
+                        dplyr::select(qid) %>%
+                        dplyr::distinct() %>%
+                        nrow())
+
+
+## reads aligned correctly and uniquely
+reads.aligned.right.uniq <- (dplyr::filter(compr, hit & multihitID==0) %>%
+                             dplyr::select(qid) %>%
+                             dplyr::distinct() %>%
+                             nrow())
+
+## reads aligned correctly within one of multi hits
+reads.aligned.right.multi <- (dplyr::filter(compr, hit & multihitID!=0) %>%
+                              dplyr::select(qid) %>%
+                              dplyr::distinct() %>%
+                              nrow())
+
+stopifnot(reads.aligned.right==reads.aligned.right.uniq+reads.aligned.right.multi)
+
+call.site.stat <- c(call.site.stat,
+                    "reads.all"=nrow(truth),
+                    "reads.aligned"=reads.aligned,
+                    "reads.aligned.right"=reads.aligned.right,
+                    "reads.aligned.right.uniq"=reads.aligned.right.uniq,
+                    "reads.aligned.right.multi"=reads.aligned.right.multi)
+
+
+print(as.data.frame(call.site.stat))
+message("\nCaller site stat written callstat.txt" )
+write.table(as.data.frame(call.site.stat), file="callstat.txt",
+            quote=FALSE, sep="\t", col.name=FALSE)
+save.image(file = "debug.checkResults.RData")
+
+
+#### reads level comparison, plots ####
+
+x <- (dplyr::select(compr,
+                    chr.x, strand.x, position.x,
+                    width.x, breakpoint.x, anyHit) %>%
+      dplyr::distinct())
+
+
+
+#########################################################
 q()
 
 get_repeakMasker <- function(freeze="hg18") {
@@ -390,43 +473,5 @@ findOverlaps(subset(truth.site.call.gr, is.na(subjectHits.uniq) & is.na(subjectH
              subset(rmsk.gr, width>100),
              maxgap=args$err,
              ignore.strand=TRUE)
-
-
-
-
-
-res.all <- plyr::rbind.fill(load_uniqueSites_from_RData(),
-                        load_multiSites_from_RData())
-
-res.all <- plyr::rbind.fill(res.uniq,
-                            res.multi)
-
-compr <- merge(truth, res.all, by=c("alias", "qname"), all.x=TRUE, all.y=TRUE)
-
-is_good_hit <- function(x, err=0) {
-    is.good <- with(x, 
-                    chr.x==chr.y &
-                        strand.x==strand.y &
-                            abs(position.x-position.y)<=err &
-                                abs(breakpoint.x-breakpoint.y)<=err )
-    is.good[is.na(is.good)] <- FALSE
-    return(is.good)
-}
-
-compr$hit <- is_good_hit(compr, args$err)
-
-compr$hit <- is_good_hit(compr, 3)
-compr$hit <- is_good_hit(compr, 2)
-compr$hit <- is_good_hit(compr, 1)
-compr$hit <- is_good_hit(compr, 0)
-
-compr <- (compr %>%
-              group_by(qid.x) %>%
-                  mutate(nAln=n(),
-                         anyHit=any(hit)) )
-
-sum(compr$hit)
-
-sum(readRecovered$readAligned)
 
 
