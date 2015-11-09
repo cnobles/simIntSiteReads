@@ -61,14 +61,15 @@ get_args <- function() {
     parser$add_argument("-c", "--codeDir", type="character", nargs=1,
                         default=codeDir,
                         help="Directory of code")
-    parser$add_argument("-e", "--error_percentage", type="integer", nargs=1,
-            default=0, help="percent of nucleotides in reads with substitution uniform random errors")
-    
+    parser$add_argument("-e", "--errRate", type="character", nargs=1,
+                        default=0,
+                        help="error rate, [0,1]")
     parser$add_argument("-w", "--width_distribution", type="character", nargs=1,
                         default="uniform", choices=c("uniform", "maxwell_boltzmann"),
                         help="molecule width distribution for reads")
     
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
+    args$errRate <- as.numeric(args$errRate)
     args$seed <- 123457
     
     return(args)
@@ -132,6 +133,7 @@ oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
 message("\nGenerate random sites")
 site <- get_random_loci(sp=Hsapiens, n=as.integer(args$sites*1.2))
 
+message("\nRemoving sites close to N regions")
 checkNbase <- function(site, width=3000) {
     seq.plus <- get_sequence_downstream(Hsapiens,
                                         site$chr,
@@ -186,14 +188,15 @@ I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
                             intseq.list[[i]],
                             R1L=args$R1L,
                             R2L=args$R2L)
-     df <- generate_seq_error(df, args$error_percentage)
      return(df) }
                              ,BPPARAM=MulticoreParam(5)) 
 
 
 I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
 
-##I1R1R2qNamedf <- generate_seq_error(I1R1R2qNamedf, args$error_percentage)
+message("\nPlanting base errors with rate ", args$errRate)
+I1R1R2qNamedf$R1 <- plant_base_error(I1R1R2qNamedf$R1, args$errRate)
+I1R1R2qNamedf$R2 <- plant_base_error(I1R1R2qNamedf$R2, args$errRate)
 
 ## fix qname qid
 I1R1R2qNamedf <- (I1R1R2qNamedf %>%

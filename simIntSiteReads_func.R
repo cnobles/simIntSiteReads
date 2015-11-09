@@ -148,6 +148,23 @@ get_sequence_downstream <- function(sp, chr, position, strand, width) {
     return( cbind(seq, df ))
 }
 
+#' Generate base error
+#' @param R character vector
+#' @param e error rate, [0,1]
+#' @return chracter vector with base mutations of rate e 
+#' @example
+#' s <- paste0(rep("G", 170), collapse = "")
+#' R1 <- rep(s, 1000000)
+#' R1e <- plant_base_error(R1, e=0.02)
+plant_base_error <- function(R, e=0.02) {
+    Re <- lapply(R, function(s){
+        idx <- which(runif(nchar(s))*0.75<e)
+        newChar <- sample(c("A","C","G", "T"), length(idx), replace = TRUE)
+        for( i in seq_along(idx)) substr(s, idx[i], idx[i]) <- newChar[i]
+        return(s)
+    })
+    return(unlist(Re))  
+}
 
 
 #' Given integration sequence and oligo information make R1 R2 I1
