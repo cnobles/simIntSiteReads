@@ -1,3 +1,21 @@
+s <- paste0(rep("G", 170), collapse = "")
+R1 <- rep(s, 1000000)
+
+plant_base_error <- function(R, e=0.02) {
+  Re <- lapply(R, function(s){
+    n=nchar(s)
+    idx <- which(runif(n)*0.75<=e)
+    newChar <- sample(c("A","C","G", "T"), length(idx), replace = TRUE)
+    for( i in seq_along(idx)) substr(s, idx[i], idx[i]) <- newChar[i]
+    return(s)
+  })
+  return(unlist(Re))  
+}
+R1e <- plant_base_error(R1, e=0.02)
+
+
+
+
 df <- data.frame(chr=site$chr,
                  start=site$position,
                  strand=site$strand,
