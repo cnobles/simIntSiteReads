@@ -253,6 +253,27 @@ load_multiSites_from_RData <- function(meta=metadata) {
     sites <- dplyr::rbind_all(sites.l)
 }   
 
+
+load_run_stats <- function(workDir=".") {
+    
+    stats.file <- list.files(workDir, pattern="^stats.RData$",
+                             recursive=TRUE, full.names=TRUE)
+    
+    tmp.statlist <- lapply(setNames(stats.file, stats.file), function(x) {
+        a <- load(x)
+        get(a)
+    })
+    stats <- plyr:::rbind.fill(tmp.statlist)
+    stats$sample <- as.character(stats$sample)
+    rownames(stats) <- NULL
+    
+    return( c("primed"=sum(stats$primed),
+              "LTRed"=sum(stats$LTRed),
+              "linkered"=sum(stats$linkered),
+              "curated"=sum(stats$curated)) )
+    
+}
+
 #### load data, truth and results ####
 #### site level comparison ####
 
@@ -394,8 +415,11 @@ reads.aligned.right.multi <- (dplyr::filter(compr, hit & multihitID!=0) %>%
 
 stopifnot(reads.aligned.right==reads.aligned.right.uniq+reads.aligned.right.multi)
 
+runStat <- load_run_stats()
+
 call.site.stat <- c(call.site.stat,
                     "reads.all"=nrow(truth),
+                    runStat,
                     "reads.aligned"=reads.aligned,
                     "reads.aligned.right"=reads.aligned.right,
                     "reads.aligned.right.uniq"=reads.aligned.right.uniq,

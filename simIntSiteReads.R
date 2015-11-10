@@ -75,7 +75,7 @@ get_args <- function() {
     return(args)
 }
 args <- get_args()
-write.table(t(as.data.frame(args)), col.names=FALSE, quote=FALSE, sep="\t")
+print(t(as.data.frame(args)), quote=FALSE)
 
 libs <- c("stringr",
           "RMySQL",
@@ -167,6 +167,8 @@ pos <- site[,
                        width=sort(uniform_width_distribution(args$sonicLength, 31, 1000))),
             1:nrow(site)]
 
+
+##plyr::adply(site, 1, transform, width=sort(sample(31:1000, 100)))
 
 message("\nGenerate human sequences for sites")
 intseq <- get_sequence_downstream(Hsapiens,

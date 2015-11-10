@@ -12,6 +12,12 @@ plant_base_error <- function(R, e=0.02) {
 }
 R1e <- plant_base_error(R1, e=0.02)
 
+base_diff <- function(a,b) {
+    sum(strsplit(a, "")[[1]] != strsplit(b, "")[[1]])
+}
+ndiff <- mapply(base_diff, R1, R1e)
+summary(ndiff)
+
 
 
 
@@ -25,7 +31,8 @@ merge(data.frame(chr=site$chr,
                  strand=site$strand),
       data.frame(width=width))
 
-
+a="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+b="AAAAAAAAAATAAAAAAAAAAAAAAAAAAAAA"
 
 #' get random loci from reference genome
 #' @param sp name of genome, Hsapiens, etc
