@@ -91,6 +91,25 @@ get_random_loci <- function(sp=Hsapiens, n=20) {
 }
 
 
+#' get random width for a site from reference genome
+#' using gaussian random generator but only accept width>minWidth
+#' the default parameters are as close as we get from real data
+#' @param n  number of width
+#' @param mean mean of gaussian
+#' @param sd sd
+#' @param minWidth width>minWidth are accepted
+#' @return integer vector
+#' 
+get_random_width_gaussian <- function(n=100, mean=70, sd=251, minWidth=30) {
+    z <- integer()
+    while( length(z) < n ) {
+        z <- c(z, as.integer(rnorm(3*n, mean=mean, sd=sd)))   
+        z <- z[z>minWidth]
+    }
+    z <- sample(z, n, replace=FALSE)
+    return(as.integer(z))
+}
+
 
 #' get sequence from a position down stream
 #' @param sp  species, Hsapiens, etc

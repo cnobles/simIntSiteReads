@@ -155,18 +155,16 @@ site <- site[!isNClose,]
 stopifnot(!any(checkNbase(site)))
 site <- dplyr::sample_n(site, args$sites, replace=FALSE)
 
-##width <- sample(200:1000, 100, replace=FALSE)
-##width <- c(30:1000)
-
 site <- as.data.table(site)
 pos <- site[,
             data.frame(chr,
                        position,
                        strand,
                        ##sort(maxwell_boltzmann_width_distribution(args$sonicLength, 100))
-                       width=sort(uniform_width_distribution(args$sonicLength, 31, 1000))),
-            1:nrow(site)]
-
+                       ##width=sort(uniform_width_distribution(args$sonicLength, 31, 1000))),
+                       width=sort(get_random_width_gaussian(n=args$sonicLength))),
+                       1:nrow(site)]
+            
 
 ##plyr::adply(site, 1, transform, width=sort(sample(31:1000, 100)))
 
