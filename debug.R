@@ -1,3 +1,7 @@
+qplot(truth$width, binwidth=15)
+
+
+
 s <- paste0(rep("G", 170), collapse = "")
 R1 <- rep(s, 1000000)
 

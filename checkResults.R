@@ -36,10 +36,14 @@ get_args <- function() {
     parser$add_argument("-n", "--nproc", type="integer", nargs=1,
                         default=5,
                         help="tolerance for alignment")
+    
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
+    
+    args$workDir <- normalizePath(args$workDir, mustWork=TRUE)
+    return(args)
 }
 args <- get_args()
-print(args)
+print(t(as.data.frame(args)))
 
 libs <- c("stringr",
           "plyr",
@@ -435,10 +439,42 @@ save.image(file = "debug.checkResults.RData")
 
 #### reads level comparison, plots ####
 
-x <- (dplyr::select(compr,
-                    chr.x, strand.x, position.x,
-                    width.x, breakpoint.x, anyHit) %>%
-      dplyr::distinct())
+x <- unlist(c(dplyr::ungroup(compr) %>%
+              dplyr::filter(hit) %>%
+              dplyr::select(width.y)))
+
+widthcount.df <- merge(as.data.frame(table(width=truth$width)),
+                       as.data.frame(table(width=x)),
+                       by="width",
+                       all.x=TRUE,
+                       all.y=TRUE)
+
+widthcount.df$width <- as.integer(widthcount.df$width)
+widthcount.df[is.na(widthcount.df)] <- 0
+
+
+theme_text <- theme(text = element_text(size=14),
+                    axis.text.x = element_text(size=14, face="bold"),
+                    axis.title.x = element_text(size=14, face="bold"),
+                    axis.text.y = element_text(size=14, face="bold"),
+                    axis.title.y = element_text(size=14, face="bold"))
+
+p <- (ggplot(widthcount.df, aes(x=width, y=Freq.x)) +
+      geom_line(color="red") +
+      geom_line(aes(x=width, y=Freq.y), color="blue") +
+      annotate(geom="text", x=600, y=800, hjust=0,
+               label=paste(sprintf("%s\t=\t%s", names(call.site.stat), call.site.stat), collapse="\n"), fontface="bold")+
+      xlab("Width")+
+      ylab("Read counts")+
+      theme_bw() +
+      theme_text )
+
+ggsave(filename="ReadsRecovered.pdf",
+       plot=p,
+       width=10, height=8, units="in")
+ggsave(filename="ReadsRecovered.png",
+       plot=p,
+       width=10, height=8, units="in")
 
 
 
