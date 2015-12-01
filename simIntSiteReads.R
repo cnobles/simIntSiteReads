@@ -195,6 +195,7 @@ I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
 I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
 
 message("\nPlanting base errors with rate ", args$errRate)
+I1R1R2qNamedf$I1 <- plant_base_error(I1R1R2qNamedf$I1, args$errRate)
 I1R1R2qNamedf$R1 <- plant_base_error(I1R1R2qNamedf$R1, args$errRate)
 I1R1R2qNamedf$R2 <- plant_base_error(I1R1R2qNamedf$R2, args$errRate)
 
