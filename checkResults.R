@@ -43,7 +43,7 @@ get_args <- function() {
     return(args)
 }
 args <- get_args()
-print(t(as.data.frame(args)))
+print(t(as.data.frame(args)), quote=FALSE)
 
 libs <- c("stringr",
           "plyr",
@@ -90,9 +90,9 @@ get_metadata <- function() {
 #' get the original machine undemultiplexed I1, R1, R2 fastq.gz files
 get_machine_file <- function(dir="Data") {
     fastqFiles <- list.files(path=dir, pattern="fastq.gz", full.names=TRUE)
-    I1File <-  grep("I1", fastqFiles, value=TRUE)
-    R1File <-  grep("R1", fastqFiles, value=TRUE)
-    R2File <-  grep("R2", fastqFiles, value=TRUE)
+    I1File <-  grep("_I1_", fastqFiles, value=TRUE)
+    R1File <-  grep("_R1_", fastqFiles, value=TRUE)
+    R2File <-  grep("_R2_", fastqFiles, value=TRUE)
     stopifnot(length(I1File)==1)
     stopifnot(length(R1File)==1)
     stopifnot(length(R2File)==1)
@@ -271,12 +271,30 @@ load_run_stats <- function(workDir=".") {
     stats$sample <- as.character(stats$sample)
     rownames(stats) <- NULL
     
-    return( c("primed"=sum(stats$primed),
+    return( c("demultiplexed"=sum(stats$barcoded),
               "LTRed"=sum(stats$LTRed),
               "linkered"=sum(stats$linkered),
-              "curated"=sum(stats$curated)) )
+              "LTRed.linkered"=sum(stats$ltredlinkered),
+              "lengthTrimed"=sum(stats$lenTrim),
+              "vectorTrimed"=sum(stats$vTrimed)) )
     
 }
+
+
+#' check total number of decoded reads
+#' @param metadata, metadata
+#' @return named vector of numbers of reads in R1 and R2
+check_demultiplexed_reads <- function(metadata) {
+    sumR1 <- summary(readFastq(metadata$R1fastq))
+    sumR2 <- summary(readFastq(metadata$R2fastq))
+    return(c('nR1'=as.integer(sumR1["Length"]),
+             'nR2'=as.integer(sumR2["Length"])))
+}
+
+
+check_runtime_by_logs <- function() {
+}
+
 
 #### load data, truth and results ####
 #### site level comparison ####
@@ -286,6 +304,8 @@ metadata <- cbind(get_metadata(),
 
 truth <- load_truth_from_fastq(metadata)
 stopifnot(!any(duplicated(truth$qid)))
+
+
 
 truth.site <- truth %>%
               dplyr::select(chr, strand, position) %>%
