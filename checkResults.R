@@ -292,8 +292,59 @@ check_demultiplexed_reads <- function(metadata) {
 }
 
 
+#' check run time by looking at logs
+#' time start is logged in logs/errorCorrectOutput.txt
+#' time end is taken as the latest from logs/callSitesOutput*.txt
+#' @return time elasped in seconds
+#' 
 check_runtime_by_logs <- function() {
+    format <- "%a %b %d %H:%M:%S %Y"
+    ##x1 <- "Mon Nov  9 10:16:39 2015"
+    ##x2 <- "Mon Nov  9 10:16:58 2015"
+    
+    cmd <- "head -15 logs/errorCorrectOutput.txt | grep Started"
+    cout <- system(cmd, intern=TRUE)
+    x1 <- sub("Start.*at ", "", cout)
+    t1 <- strptime(x1, format=format)
+    
+    cmd <- "head -15 logs/callSitesOutput*.txt | grep reported | grep Results"
+    cout <- system(cmd, intern=TRUE)
+    x2 <- sub("Results reported on ", "", cout)
+    t2 <- head(sort(strptime(x2, format=format), decreasing=TRUE), 1)
+    
+    tsecs <- as.integer(difftime(t2,t1, units="secs"))
+    return(tsecs)
 }
+##check_runtime_by_logs()
+
+
+#' check blat parameter from alignmentg log
+#' @return time elasped in seconds
+#' 
+check_blat_param_by_log <- function() {
+    cmd <- "grep blat logs/alignOutput1.txt | grep psl"
+    cout <- system(cmd, intern=TRUE)
+    
+    tileSize <- as.integer(stringr::str_match(cout, "tileSize=(\\d+)")[2])
+    stepSize <- as.integer(stringr::str_match(cout, "stepSize=(\\d+)")[2])
+    minIdentity <- as.integer(stringr::str_match(cout, "minIdentity=(\\d+)")[2])
+    maxIntron <- as.integer(stringr::str_match(cout, "maxIntron=(\\d+)")[2])
+    minScore <- as.integer(stringr::str_match(cout, "minScore=(\\d+)")[2])
+    
+    param <- c("tileSize"=tileSize,
+               "stepSize"=stepSize,
+               "minIdentity"=minIdentity,
+               "maxIntron"=maxIntron,
+               "minScore"=minScore)
+    param.name <- names(param)
+    param.default <- c(11, 11, 30, 100000, 90)
+    
+    param <- ifelse(is.na(param), param.default, param)
+    names(param) <- param.name
+    
+    return(param)
+}
+##check_blat_param_by_log()
 
 
 #### load data, truth and results ####
@@ -437,6 +488,14 @@ reads.aligned.right.multi <- (dplyr::filter(compr, hit & multihitID!=0) %>%
                               dplyr::distinct() %>%
                               nrow())
 
+## site abundance recovery
+site.abund <- (dplyr::select(compr, chr.x, strand.x, position.x, anyHit) %>%
+               dplyr::distinct() %>% 
+               dplyr::group_by(chr.x, strand.x, position.x) %>%
+               dplyr::summarize(n=length(unique(qid)),
+                                n.rec=sum(anyHit) ))
+
+
 stopifnot(reads.aligned.right==reads.aligned.right.uniq+reads.aligned.right.multi)
 
 runStat <- load_run_stats()
@@ -447,7 +506,9 @@ call.site.stat <- c(call.site.stat,
                     "reads.aligned"=reads.aligned,
                     "reads.aligned.right"=reads.aligned.right,
                     "reads.aligned.right.uniq"=reads.aligned.right.uniq,
-                    "reads.aligned.right.multi"=reads.aligned.right.multi)
+                    "reads.aligned.right.multi"=reads.aligned.right.multi,
+                    "runtime"=check_runtime_by_logs(),
+                    check_blat_param_by_log())
 
 
 print(as.data.frame(call.site.stat))
@@ -457,8 +518,7 @@ write.table(as.data.frame(call.site.stat), file="callstat.txt",
 save.image(file = "debug.checkResults.RData")
 
 
-#### reads level comparison, plots ####
-
+#### length recovered ####
 x <- unlist(c(dplyr::ungroup(compr) %>%
               dplyr::filter(hit) %>%
               dplyr::select(width.y)))
@@ -489,16 +549,40 @@ p <- (ggplot(widthcount.df, aes(x=width, y=Freq.x)) +
       theme_bw() +
       theme_text )
 
-ggsave(filename="ReadsRecovered.pdf",
+ggsave(filename="ReadsRecoveredByLength.pdf",
        plot=p,
        width=10, height=8, units="in")
-ggsave(filename="ReadsRecovered.png",
+ggsave(filename="ReadsRecoveredByLength.png",
        plot=p,
        width=10, height=8, units="in")
+save(widthcount.df, file="widthcount.df.RData")
 
+#### site abundance recovered ####
+cols <- c("recovered"="blue", "simulated"="red")
+##cols <- factor(cols)
+p2 <- (ggplot(arrange(ungroup(site.abund), n.rec), aes(x=1:length(n.rec))) +
+       geom_line(aes(y=n, color="simulated")) +
+       geom_line(aes(y=n.rec, color="recovered")) +
+       xlab("Site index (ordered to guide the eye)")+
+       ylab("Breakpoints recovered")+
+       ##scale_color_manual(name="Lines", values=cols)+
+       scale_color_manual(name="Lines", limits=c("simulated", "recovered"), values=cols)+
+       theme_bw() +
+       theme_text +
+       theme(legend.justification=c(1,0), legend.position=c(1,0),
+       legend.text=element_text(size=14, face="bold")) )
+##p2
+ggsave(filename="ReadsRecoveredBySite.pdf",
+       plot=p2,
+       width=10, height=8, units="in")
+ggsave(filename="ReadsRecoveredBySite.png",
+       plot=p2,
+       width=10, height=8, units="in")
+save(site.abund, file="site.abun.RData")
 
 
 #########################################################
+save.image(file = "debug.checkResults.RData")
 q()
 
 get_repeakMasker <- function(freeze="hg18") {
