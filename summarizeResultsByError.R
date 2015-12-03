@@ -63,6 +63,116 @@ wideScreen <- function(howWide=as.numeric(strsplit(system('stty size', intern=T)
 }
 wideScreen()
 
+
+gather_dataframe <- function(pattern=""){
+    
+    site.abun.file <- list.files(path=args$workDir,
+                                 pattern=pattern,
+                                 recursive=TRUE)
+    
+    site.abun.lst <- lapply(site.abun.file, function(f) {
+        df <- get(load(f))
+        df$name <- dirname(f)
+        return(df)
+    } )
+    names(site.abun.lst) <- dirname(site.abun.file)
+    
+    return(site.abun.lst)
+}
+
+#### plot width abundance ####
+message("plot width abundance")
+df <- gather_dataframe(pattern="widthcount.df.RData")
+widthcount.df <- dplyr::rbind_all(df)
+
+df0 <- (dplyr::filter(widthcount.df, name=="I0") %>%
+        dplyr::mutate(Freq.y=Freq.x, name="Simulated") %>%
+        dplyr::select(width, Freq.y, name))
+df <-  dplyr::rbind_list(
+    df0,
+    dplyr::select(widthcount.df, width, Freq.y, name))
+rm(df0)
+
+namemap <- c("Simulated"="Simulated",
+             "I0"="Err 0%",
+             "I1"="Err 1%",
+             "I2"="Err 2%",
+             "I4"="Err 4%")
+df <-  dplyr::mutate(df, set=factor(namemap[name], levels=namemap))
+
+theme_text <- theme(text = element_text(size=14),
+                    axis.text.x = element_text(size=14, face="bold"),
+                    axis.title.x = element_text(size=14, face="bold"),
+                    axis.text.y = element_text(size=14, face="bold"),
+                    axis.title.y = element_text(size=14, face="bold"))
+
+p1 <- (ggplot(df, aes(x=width, y=Freq.y, color=set)) +
+       geom_line() +
+       xlab("Sonic length")+
+       ylab("Read counts")+
+       theme_bw() +
+       theme_text +
+       theme(legend.justification=c(1,0), legend.position=c(1,0.5),
+             legend.text=element_text(size=14, face="bold")) )
+##p1
+ggsave(filename="ReadsRecoveredByLength.pdf",
+       plot=p1,
+       width=10, height=8, units="in")
+ggsave(filename="ReadsRecoveredByLength.png",
+       plot=p1,
+       width=10, height=8, units="in")
+
+
+
+
+#### plot site abundance ####
+message("plot site abundance")
+df <- gather_dataframe(pattern="site.abun.RData")
+site.abun <- dplyr::rbind_all(df)
+
+site.abun <- (dplyr::group_by(site.abun, name) %>%
+              dplyr::mutate(idx=1:n(), n.rec=sort(n.rec)) %>%
+              dplyr::ungroup())
+
+df0 <- (dplyr::filter(site.abun, name=="I0") %>%
+        dplyr::mutate(n.rec=n, name="Simulated") %>%
+        dplyr::select(idx, n.rec, name))
+
+df <-  dplyr::rbind_list(
+    df0,
+    dplyr::select(site.abun, idx, n.rec, name))
+rm(df0)
+
+namemap <- c("Simulated"="Simulated",
+             "I0"="Err 0%",
+             "I1"="Err 1%",
+             "I2"="Err 2%",
+             "I4"="Err 4%")
+df <-  dplyr::mutate(df, set=unname(factor(namemap[name], levels=namemap)))
+
+
+p2 <- (ggplot(df, aes(x=idx, y=n.rec, color=set)) +
+       geom_line() +
+       xlab("Site index (ordered to guide the eye)")+
+       ylab("Sonic length recovered")+
+       theme_bw() +
+       theme_text +
+       theme(legend.justification=c(1,0), legend.position=c(1,0),
+             legend.text=element_text(size=14, face="bold")) )
+##p2
+ggsave(filename="ReadsRecoveredBySite.pdf",
+       plot=p2,
+       width=10, height=8, units="in")
+ggsave(filename="ReadsRecoveredBySite.png",
+       plot=p2,
+       width=10, height=8, units="in")
+
+
+q()
+
+
+
+
 get_metadata <- function() {
     df1 <- read.table(file.path(args$workDir, "sampleInfo.tsv"), header=TRUE)
     df2 <- read.table(file.path(args$workDir, "processingParams.tsv"), header=TRUE)
@@ -529,7 +639,7 @@ widthcount.df <- merge(as.data.frame(table(width=truth$width)),
                        all.x=TRUE,
                        all.y=TRUE)
 
-widthcount.df$width <- as.integer(as.character((widthcount.df$width)))
+widthcount.df$width <- as.integer(widthcount.df$width)
 widthcount.df[is.na(widthcount.df)] <- 0
 
 
