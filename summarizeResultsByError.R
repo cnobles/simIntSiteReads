@@ -80,6 +80,22 @@ gather_dataframe <- function(pattern=""){
     return(site.abun.lst)
 }
 
+gather_stats <- function(pattern=""){
+    
+    files <- list.files(path=args$workDir,
+                       pattern=pattern,
+                       recursive=TRUE)
+    
+    stats.lst <- lapply(files, function(f) {
+        df <- read.csv(files[1], sep="\t", header=FALSE)
+        names(df) <- c("stat", dirname(f))
+        return(df)
+    } )
+    
+    return(site.abun.lst)
+}
+
+
 #### plot width abundance ####
 message("plot width abundance")
 df <- gather_dataframe(pattern="widthcount.df.RData")
@@ -166,6 +182,39 @@ ggsave(filename="ReadsRecoveredBySite.pdf",
 ggsave(filename="ReadsRecoveredBySite.png",
        plot=p2,
        width=10, height=8, units="in")
+
+
+
+#### plot site abundance, another view ####
+df <- gather_dataframe(pattern="site.abun.RData")
+site.abun <- dplyr::rbind_all(df)
+namemap <- c("Simulated"="Simulated",
+             "I0"="Err 0%",
+             "I1"="Err 1%",
+             "I2"="Err 2%",
+             "I4"="Err 4%")
+site.abun <-  dplyr::mutate(site.abun,
+                            set=unname(factor(namemap[name], levels=namemap)))
+
+site.abun.count <- site.abun %>% dplyr::count(n.rec, set)
+p3 <- (ggplot(site.abun.count, aes(x=n.rec, y=n, color=set)) +
+       geom_line() +
+       xlab("Abundance")+
+       ylim(-50,5050)+
+       ylab("Sites recovered")+
+       theme_bw() +
+       theme_text +
+       theme(legend.justification=c(1,0), legend.position=c(0.4,0.6),
+             legend.text=element_text(size=14, face="bold")) )
+##p3
+ggsave(filename="ReadsRecoveredBySite2.pdf",
+       plot=p3,
+       width=10, height=8, units="in")
+ggsave(filename="ReadsRecoveredBySite2.png",
+       plot=p3,
+       width=10, height=8, units="in")
+
+
 
 
 q()
