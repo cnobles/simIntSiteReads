@@ -83,8 +83,8 @@ gather_dataframe <- function(pattern=""){
 gather_stats <- function(pattern=""){
     
     files <- list.files(path=args$workDir,
-                       pattern=pattern,
-                       recursive=TRUE)
+                        pattern=pattern,
+                        recursive=TRUE)
     
     stats.lst <- lapply(files, function(f) {
         df <- read.csv(files[1], sep="\t", header=FALSE)
