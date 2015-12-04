@@ -80,19 +80,19 @@ gather_dataframe <- function(pattern=""){
     return(site.abun.lst)
 }
 
-gather_stats <- function(pattern=""){
+gather_stats <- function(pattern="callstat.txt"){
     
     files <- list.files(path=args$workDir,
                         pattern=pattern,
                         recursive=TRUE)
     
     stats.lst <- lapply(files, function(f) {
-        df <- read.csv(files[1], sep="\t", header=FALSE)
+        df <- read.csv(f, sep="\t", header=FALSE)
         names(df) <- c("stat", dirname(f))
         return(df)
     } )
     
-    return(site.abun.lst)
+    return(stats.lst)
 }
 
 
@@ -215,6 +215,40 @@ ggsave(filename="ReadsRecoveredBySite2.png",
        width=10, height=8, units="in")
 
 
+
+
+stats <- Reduce(merge, gather_stats())
+rownames(stats) <- stats$stat
+
+wanted <- c("reads.all",
+            "demultiplexed",
+            "LTRed",
+            "linkered",
+            "LTRed.linkered",
+            "lengthTrimed",
+            "vectorTrimed",
+            "reads.aligned",
+            "reads.aligned.right")
+
+check_demultiplex <- function() {
+
+    err <- c(0.00, 0.01, 0.02, 0.04)
+    
+    c0 <- stats["reads.all", 2:5] * dbinom(0, size=12, prob=err)
+    c1 <- stats["reads.all", 2:5] * (dbinom(0, size=12, prob=err)+
+                                     dbinom(1, size=12, prob=err))
+    c2 <- stats["reads.all", 2:5] * (dbinom(0, size=12, prob=err)+
+                                     dbinom(1, size=12, prob=err)+
+                                     dbinom(2, size=12, prob=err))
+    
+    df <- rbind(stats[wanted[1:2], 2:5],
+                "correct0"=as.integer(c0),
+                "correct1"=as.integer(c1),
+                "correct2"=as.integer(c2))
+    colnames(df) <- paste0("err_", err)
+    return(df)
+}
+check_demultiplex()
 
 
 q()
