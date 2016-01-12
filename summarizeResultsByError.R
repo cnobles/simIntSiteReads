@@ -80,19 +80,19 @@ gather_dataframe <- function(pattern=""){
     return(site.abun.lst)
 }
 
-gather_stats <- function(pattern=""){
+gather_stats <- function(pattern="callstat.txt"){
     
     files <- list.files(path=args$workDir,
                         pattern=pattern,
                         recursive=TRUE)
     
     stats.lst <- lapply(files, function(f) {
-        df <- read.csv(files[1], sep="\t", header=FALSE)
+        df <- read.csv(f, sep="\t", header=FALSE)
         names(df) <- c("stat", dirname(f))
         return(df)
     } )
     
-    return(site.abun.lst)
+    return(stats.lst)
 }
 
 
@@ -214,6 +214,95 @@ ggsave(filename="ReadsRecoveredBySite2.png",
        plot=p3,
        width=10, height=8, units="in")
 
+
+
+
+#### check demultiplex efficiency ####
+stats <- Reduce(merge, gather_stats())
+rownames(stats) <- stats$stat
+
+wanted <- c("reads.all",
+            "demultiplexed",
+            "LTRed",
+            "linkered",
+            "LTRed.linkered",
+            "lengthTrimed",
+            "vectorTrimed",
+            "reads.aligned",
+            "reads.aligned.right")
+
+check_demultiplex <- function() {
+    
+    err <- c(0.00, 0.01, 0.02, 0.04)
+    
+    c0 <- stats["reads.all", 2:5] * dbinom(0, size=12, prob=err)
+    c1 <- stats["reads.all", 2:5] * (dbinom(0, size=12, prob=err)+
+                                     dbinom(1, size=12, prob=err))
+    c2 <- stats["reads.all", 2:5] * (dbinom(0, size=12, prob=err)+
+                                     dbinom(1, size=12, prob=err)+
+                                     dbinom(2, size=12, prob=err))
+    
+    df <- rbind(stats[wanted[1:2], 2:5],
+                "correct0"=as.integer(c0),
+                "correct1"=as.integer(c1),
+                "correct2"=as.integer(c2))
+    colnames(df) <- paste0("err_", err)
+    return(df)
+}
+check_demultiplex()
+
+
+#### plot site recovery and false positives ####
+stats <- Reduce(merge, gather_stats())
+rownames(stats) <- stats$stat
+
+wanted <- c("all.sim",
+            "found.any",
+            "found.uniq",
+            "found.uniq.only",
+            "found.multi",
+            "found.multi.only",
+            "found.both",
+            "falseP.uniq",
+            "falseP.multi")
+
+namemap <- c("I0"="err 0%", "I1"="err 1%", "I2"="err 2%", "I4"="err 4%")
+
+colnames(stats)[2:5] <-  namemap[colnames(stats)[2:5]]
+
+##stats[wanted,]
+
+mdf <- reshape2::melt(stats[wanted[-1],])
+mdf$stat <- factor(mdf$stat, levels=wanted)
+
+colmap <- c("found.any"="red",
+            "found.uniq"="red",
+            "found.uniq.only"="red",
+            "found.multi"="red",
+            "found.multi.only"="red",
+            "found.both"="red",
+            "falseP.uniq"="blue",
+            "falseP.multi"="blue")
+
+mdf$color <- factor(colmap[as.character(mdf$stat)])
+
+p3 <- (ggplot(mdf, aes(x=stat, y=value)) +
+       geom_bar(stat="identity", aes(fill=color)) +
+       geom_text(aes(label = value), size=4, fontface=2, vjust=0) +
+       scale_fill_manual(values = c("blue", "red", "green"), guide = FALSE)+
+       facet_grid(. ~ variable) +
+       ylab("Sites") +
+       xlab(NULL) +
+       theme_bw() +
+       theme_text +
+       theme(axis.text.x = element_text(angle = 45, hjust = 1)) )
+#p3       
+ggsave(filename="SitesRecovered.pdf",
+       plot=p3,
+       width=10, height=8, units="in")
+ggsave(filename="SitesRecovered.png",
+       plot=p3,
+       width=10, height=8, units="in")
 
 
 
