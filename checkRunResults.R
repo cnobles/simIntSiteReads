@@ -583,7 +583,7 @@ save(site.abund, file="site.abun.RData")
 
 #########################################################
 save.image(file = "debug.checkResults.RData")
-q()
+##q()
 
 get_repeakMasker <- function(freeze="hg18") {
     
@@ -607,21 +607,21 @@ get_repeakMasker <- function(freeze="hg18") {
     rmsk.tab <- get_repeakMasker_tab(dbConn)
     
     df <- plyr::ldply(rmsk.tab, function(tab)
-        {
-            sql <- sprintf("SELECT genoName, genoStart, genoEnd, genoLeft, strand FROM %s", tab)
-            message(sql)
-            suppressWarnings(dbGetQuery(dbConn, sql))
-        } )
+                  {
+                      sql <- sprintf("SELECT * FROM %s", tab)
+                      message(sql)
+                      suppressWarnings(dbGetQuery(dbConn, sql))
+                  } )
     
-    colnames(df) <- c("chr", "start", "end", "left", "strand")
-    return(df)
+    gr <- makeGRangesFromDataFrame(df,
+                                   seqnames.field="genoName",
+                                   start.field="genoStart",
+                                   end.field="genoEnd",
+                                   strand.field="strand",
+                                   keep.extra.columns=TRUE)
+    return(gr)
 }
-rmsk <- get_repeakMasker()
-rmsk.gr <- makeGRangesFromDataFrame(rmsk,
-                                    start.field="start",
-                                    end="end",
-                                    strand.field="strand",
-                                    keep.extra.columns=TRUE)
+rmsk.gr <- get_repeakMasker()
 
 
 truth.site.call <- read.table("truth.site.call.txt", header=TRUE)
@@ -631,11 +631,34 @@ truth.site.call.gr <- makeGRangesFromDataFrame(truth.site.call,
                                                strand.field="strand",
                                                keep.extra.columns=TRUE)
 
-findOverlaps(truth.site.call.gr, rmsk.gr, maxgap=args$err)
+rmOvl <- findOverlaps(query=truth.site.call.gr,
+                      subject=rmsk.gr,
+                      maxgap=args$err,
+                      ignore.strand=TRUE)
 
-findOverlaps(subset(truth.site.call.gr, is.na(subjectHits.uniq) & is.na(subjectHits.multi)),
-             subset(rmsk.gr, width>100),
-             maxgap=args$err,
-             ignore.strand=TRUE)
+truth.site.call.gr$repClass <- NA
+truth.site.call.gr$repFamily <- NA
 
+truth.site.call.gr$repClass[queryHits(rmOvl)] <- rmsk.gr$repClass[subjectHits(rmOvl)]
+truth.site.call.gr$repFamily[queryHits(rmOvl)] <- rmsk.gr$repFamily[subjectHits(rmOvl)]
+
+
+truth.site.call <- dplyr::select(as.data.frame(truth.site.call.gr),
+                                 chr=seqnames,
+                                 position=start,
+                                 strand,
+                                 queryHits,
+                                 subjectHits.uniq,
+                                 subjectHits.multi,
+                                 repClass,
+                                 repFamily)
+
+
+message("\nAnnotating the sites with repeatMasker track")
+message("File truth.site.call.txt updated")
+write.table(truth.site.call, file="truth.site.call.txt",
+            quote=FALSE, sep="\t", col.name=TRUE, row.name=FALSE)
+
+save.image(file = "debug.checkResults.RData")
+q()
 
