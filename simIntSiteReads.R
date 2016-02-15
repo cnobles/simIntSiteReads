@@ -47,10 +47,10 @@ get_args <- function() {
                         default=100,
                         help="number of sonic lengths for each site")
     parser$add_argument("-1", "--R1L", type="integer", nargs=1,
-                        default=175,
+                        default=179,
                         help="R1 read length")
     parser$add_argument("-2", "--R2L", type="integer", nargs=1,
-                        default=130,
+                        default=144,
                         help="R2 read length")
     parser$add_argument("-m", "--info", type="character", nargs=1,
                         default="sampleInfo.tsv",
@@ -64,9 +64,6 @@ get_args <- function() {
     parser$add_argument("-e", "--errRate", type="character", nargs=1,
                         default=0,
                         help="error rate, [0,1]")
-    parser$add_argument("-w", "--width_distribution", type="character", nargs=1,
-                        default="uniform", choices=c("uniform", "maxwell_boltzmann"),
-                        help="molecule width distribution for reads")
     
     args <- parser$parse_args(commandArgs(trailingOnly=TRUE))
     args$errRate <- as.numeric(args$errRate)
@@ -86,13 +83,11 @@ libs <- c("stringr",
           "ShortRead",
           "BiocParallel",
           "BSgenome",
-          "distr",
           sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze))
 null <- suppressMessages(sapply(libs, library, character.only=TRUE))
 
 source(file.path(args$codeDir, "simIntSiteReads_func.R"))
 source(file.path(args$codeDir, "sequencing_error.R"))
-source(file.path(args$codeDir, "width_distribution.R"))
 
 set.seed(args$seed)
 
@@ -160,13 +155,9 @@ pos <- site[,
             data.frame(chr,
                        position,
                        strand,
-                       ##sort(maxwell_boltzmann_width_distribution(args$sonicLength, 100))
-                       ##width=sort(uniform_width_distribution(args$sonicLength, 31, 1000))),
                        width=sort(get_random_width_gaussian(n=args$sonicLength))),
-                       1:nrow(site)]
-            
+            1:nrow(site)]
 
-##plyr::adply(site, 1, transform, width=sort(sample(31:1000, 100)))
 
 message("\nGenerate human sequences for sites")
 intseq <- get_sequence_downstream(Hsapiens,
@@ -183,12 +174,12 @@ intseq <- dplyr::mutate(intseq,
 message("\nGenerate machine sequences for sites")
 intseq.list <- split(intseq, intseq$sampleid)
 I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
-    {message(i, "\tof\t", length(intseq.list))
-     df <- make_miseq_reads(oligo[i,],
-                            intseq.list[[i]],
-                            R1L=args$R1L,
-                            R2L=args$R2L)
-     return(df) }
+                         {message(i, "\tof\t", length(intseq.list))
+                          df <- make_miseq_reads(oligo[i,],
+                                                 intseq.list[[i]],
+                                                 R1L=args$R1L,
+                                                 R2L=args$R2L)
+                          return(df) }
                              ,BPPARAM=MulticoreParam(5)) 
 
 
@@ -209,15 +200,15 @@ makeInputFolder(I1R1R2qNamedf, args$outFolder)
 
 
 message("\nDump truth to bed file")
-truth.bed <- intseq %>%
-    dplyr::mutate(
-        breakpoint=ifelse(strand=="+", position+width, position-width),
-        start=pmin(position, breakpoint),
-        end=pmax(position, breakpoint),
-        note="sim",
-        score=500) %>% 
-        arrange(chr, position, strand, breakpoint) %>% 
-            select(chr, start, end, note, score, strand)
+truth.bed <- (intseq %>%
+              dplyr::mutate(
+                  breakpoint=ifelse(strand=="+", position+width, position-width),
+                  start=pmin(position, breakpoint),
+                  end=pmax(position, breakpoint),
+                  note="sim",
+                  score=500) %>% 
+              arrange(chr, position, strand, breakpoint) %>% 
+              select(chr, start, end, note, score, strand) )
 
 
 write.table(truth.bed, file=file.path(args$outFolder, "truth.bed"),

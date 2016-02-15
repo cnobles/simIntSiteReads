@@ -662,3 +662,44 @@ write.table(truth.site.call, file="truth.site.call.txt",
 save.image(file = "debug.checkResults.RData")
 q()
 
+
+####################################################################
+get_wgEncodeDukeUniqueness35bp <- function(freeze="hg18",
+                                           table="wgEncodeDukeUniqueness35bp",
+                                           cols=c("chrom",
+                                               "chromStart",
+                                               "chromEnd",
+                                               "lowerLimit",
+                                               "dataRange")) {
+    
+    connect2UCSC <- function(freeze="hg18") {
+        junk <- sapply(dbListConnections(MySQL()), dbDisconnect)
+        dbConn <- dbConnect(MySQL(),
+                            host="genome-mysql.cse.ucsc.edu",
+                            dbname=freeze, 
+                            username="genome")
+        return(dbConn)    
+    }
+    dbConn <- connect2UCSC()
+    
+    
+    sql <- sprintf("SELECT %s FROM %s",
+                   paste(cols, collapse=", "),
+                   table)
+    message(sql)
+    df <- suppressWarnings(dbGetQuery(dbConn, sql))
+    df$upperLimit <- df$lowerLimit + df$dataRange
+    
+    gr <- makeGRangesFromDataFrame(df,
+                                   seqnames.field="chrom",
+                                   start.field="chromStart",
+                                   end.field="chromEnd",
+                                   ignore.strand=TRUE,
+                                   keep.extra.columns=TRUE)
+    
+    junk <- sapply(dbListConnections(MySQL()), dbDisconnect)
+    return(gr)
+}
+uniqueness35 <- get_wgEncodeDukeUniqueness35bp()
+
+
