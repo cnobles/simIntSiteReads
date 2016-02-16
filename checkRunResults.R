@@ -369,7 +369,7 @@ write.table(as.data.frame(call.site.stat), file="callstat.txt",
             quote=FALSE, sep="\t", col.name=FALSE)
 save.image(file = "debug.checkResults.RData")
 
-## reads aligned or not
+#### reads aligned or not, in low mappability, in repeakMasker ####
 
 ## get annotation database
 uniqueness35.gr <- get_wgEncodeDukeUniqueness35bp()
@@ -436,6 +436,33 @@ write.table(as.data.frame(mapRepCount), file="mapRepCount.txt",
             quote=FALSE, sep="\t", col.name=TRUE, row.name=FALSE)
 
 save.image(file = "debug.checkResults.RData")
+
+## get some number for excel table ##
+dplyr::ungroup(mapRepCount) %>%
+dplyr::filter(isAligned, isRep) %>%
+dplyr::summarize(total=sum(count))
+
+dplyr::ungroup(mapRepCount) %>%
+dplyr::filter(isAligned, !isRep) %>%
+dplyr::summarize(total=sum(count))
+
+dplyr::ungroup(mapRepCount) %>%
+dplyr::filter(isAligned, isLowMap) %>%
+dplyr::summarize(total=sum(count))
+
+
+dplyr::ungroup(mapRepCount) %>%
+dplyr::filter(!isAligned, isRep) %>%
+dplyr::summarize(total=sum(count))
+
+dplyr::ungroup(mapRepCount) %>%
+dplyr::filter(!isAligned, !isRep) %>%
+dplyr::summarize(total=sum(count))
+
+dplyr::ungroup(mapRepCount) %>%
+dplyr::filter(!isAligned, isLowMap) %>%
+dplyr::summarize(total=sum(count))
+
 
 #### length recovered ####
 ## site abundance recovery
