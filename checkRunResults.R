@@ -374,6 +374,7 @@ save.image(file = "debug.checkResults.RData")
 ## get annotation database
 uniqueness35.gr <- get_wgEncodeDukeUniqueness35bp()
 rmsk.gr <- get_repeakMasker()
+##rmsk.gr <- rmsk.gr[width(rmsk.gr)>=50 & width(rmsk.gr)<=2000]
 
 ## get read alignment check
 truth.read.anno <- (compr %>%
@@ -384,6 +385,7 @@ truth.read.anno <- (compr %>%
                                      breakpoint=breakpoint.x[1],
                                      rstart=min(position.x[1],breakpoint.x[1]),
                                      rend=max(position.x[1],breakpoint.x[1]),
+                                     aligned=any(nAln>0), ## any alignment, not necessary correct
                                      isUniq=any(hit),
                                      isUniq=ifelse(is.na(isUniq), FALSE, isUniq),
                                      isMulti=any(multihitID>0),
@@ -429,7 +431,7 @@ truth.read.anno$isRep <- ! is.na(truth.read.anno.gr$repClass)
 truth.read.anno$isLowMap <- truth.read.anno.gr$mappability < 0.5
 
 mapRepCount <- (truth.read.anno %>%
-                dplyr::group_by(isAligned, isRep, isLowMap) %>%
+                dplyr::group_by(aligned, isAligned, isRep, isLowMap) %>%
                 dplyr::summarize(count=n()))
 
 write.table(as.data.frame(mapRepCount), file="mapRepCount.txt",
@@ -438,6 +440,7 @@ write.table(as.data.frame(mapRepCount), file="mapRepCount.txt",
 save.image(file = "debug.checkResults.RData")
 
 ## get some number for excel table ##
+## aligned correctly
 dplyr::ungroup(mapRepCount) %>%
 dplyr::filter(isAligned, isRep) %>%
 dplyr::summarize(total=sum(count))
@@ -451,16 +454,31 @@ dplyr::filter(isAligned, isLowMap) %>%
 dplyr::summarize(total=sum(count))
 
 
+## not aligned at all
 dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(!isAligned, isRep) %>%
+dplyr::filter(!aligned, isRep) %>%
 dplyr::summarize(total=sum(count))
 
 dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(!isAligned, !isRep) %>%
+dplyr::filter(!aligned, !isRep) %>%
 dplyr::summarize(total=sum(count))
 
 dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(!isAligned, isLowMap) %>%
+dplyr::filter(!aligned, isLowMap) %>%
+dplyr::summarize(total=sum(count))
+
+
+## aligned but not right
+dplyr::ungroup(mapRepCount) %>%
+dplyr::filter(aligned, !isAligned, isRep) %>%
+dplyr::summarize(total=sum(count))
+
+dplyr::ungroup(mapRepCount) %>%
+dplyr::filter(aligned, !isAligned, !isRep) %>%
+dplyr::summarize(total=sum(count))
+
+dplyr::ungroup(mapRepCount) %>%
+dplyr::filter(aligned, !isAligned, isLowMap) %>%
 dplyr::summarize(total=sum(count))
 
 
