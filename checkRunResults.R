@@ -48,6 +48,7 @@ print(t(as.data.frame(args)), quote=FALSE)
 libs <- c("stringr",
           "plyr",
           "dplyr",
+          "data.table",
           "RMySQL",
           "GenomicRanges",
           "ShortRead",
@@ -434,6 +435,7 @@ mapRepCount <- (truth.read.anno %>%
 write.table(as.data.frame(mapRepCount), file="mapRepCount.txt",
             quote=FALSE, sep="\t", col.name=TRUE, row.name=FALSE)
 
+save.image(file = "debug.checkResults.RData")
 
 #### length recovered ####
 ## site abundance recovery
