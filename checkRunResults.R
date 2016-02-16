@@ -369,48 +369,75 @@ write.table(as.data.frame(call.site.stat), file="callstat.txt",
 save.image(file = "debug.checkResults.RData")
 
 ## reads aligned or not
-## site abundance recovery
-truth.read.anno <- (dplyr::group_by(compr, qid) %>%
-                    dplyr::summarize(qname=qname.x[1],
-                                     chr=chr.x[1],
-                                     start=min(position.x[1],breakpoint.x[1]),
-                                     end=max(position.x[1],breakpoint.x[1]),
-                                     isUniq=any(hit),
-                                     isMulti=any(multihitID>0),
-                                     isAligned=isUniq|isMulti))
-
-truth.read.anno.gr <- makeGRangesFromDataFrame(truth.read.anno,
-                                               start.field="start",
-                                               end.field="end",
-                                               ignore.strand=FALSE,
-                                               keep.extra.columns=TRUE)
 
 ## get annotation database
 uniqueness35.gr <- get_wgEncodeDukeUniqueness35bp()
 rmsk.gr <- get_repeakMasker()
 
+## get read alignment check
+truth.read.anno <- (compr %>%
+                    dplyr::group_by(qid) %>%
+                    dplyr::summarize(qname=qname.x[1],
+                                     chr=chr.x[1],
+                                     position=position.x[1],
+                                     breakpoint=breakpoint.x[1],
+                                     rstart=min(position.x[1],breakpoint.x[1]),
+                                     rend=max(position.x[1],breakpoint.x[1]),
+                                     isUniq=any(hit),
+                                     isUniq=ifelse(is.na(isUniq), FALSE, isUniq),
+                                     isMulti=any(multihitID>0),
+                                     isMulti=ifelse(is.na(isMulti), FALSE, isMulti),
+                                     isAligned=isUniq|isMulti))
 
-rmOvl <- findOverlaps(query=truth.read.anno.gr,
-                      subject=rmsk.gr,
-                      minoverlap=10,
-                      ignore.strand=TRUE)
+
+## annoatte repeatMasker by position only
+truth.read.anno.gr <- makeGRangesFromDataFrame(truth.read.anno,
+                                               start.field="rstart",
+                                               end.field="rstart",
+                                               ignore.strand=FALSE,
+                                               keep.extra.columns=TRUE)
+
+
+## annotate repeat masker
+ovl <- findOverlaps(query=truth.read.anno.gr,
+                    subject=rmsk.gr,
+                    minoverlap=1,
+                    ignore.strand=TRUE)
 
 truth.read.anno.gr$repClass <- NA
 truth.read.anno.gr$repFamily <- NA
-truth.read.anno.gr$repClass[queryHits(rmOvl)] <- rmsk.gr$repClass[subjectHits(rmOvl)]
-truth.read.anno.gr$repFamily[queryHits(rmOvl)] <- rmsk.gr$repFamily[subjectHits(rmOvl)]
+truth.read.anno.gr$repClass[queryHits(ovl)] <- rmsk.gr$repClass[subjectHits(ovl)]
+truth.read.anno.gr$repFamily[queryHits(ovl)] <- rmsk.gr$repFamily[subjectHits(ovl)]
 
-rmOvl <- findOverlaps(query=truth.read.anno.gr,
+## annotate mappability by both position and breakpoint
+end(truth.read.anno.gr) <- truth.read.anno$rend
+
+ovl <- findOverlaps(query=truth.read.anno.gr,
                       subject=uniqueness35.gr,
-                      ##minoverlap=10,
+                      ##minoverlap=30,
                       ignore.strand=TRUE)
 
-truth.read.anno.gr$upperLimit <- NA
-truth.read.anno.gr$upperLimit[queryHits(rmOvl)] <- uniqueness35.gr$upperLimit[subjectHits(rmOvl)]
+truth.read.anno.gr$mappability <- NA
+truth.read.anno.gr$mappability[queryHits(ovl)] <- uniqueness35.gr$mappability[subjectHits(ovl)]
 
+
+## make sure GRanges object doesnot change order of rows
+stopifnot(truth.read.anno$qid == truth.read.anno.gr$qid)
+
+truth.read.anno$isRep <- ! is.na(truth.read.anno.gr$repClass)
+truth.read.anno$isLowMap <- truth.read.anno.gr$mappability < 0.5
+
+mapRepCount <- (truth.read.anno %>%
+                dplyr::group_by(isAligned, isRep, isLowMap) %>%
+                dplyr::summarize(count=n()))
+
+write.table(as.data.frame(mapRepCount), file="mapRepCount.txt",
+            quote=FALSE, sep="\t", col.name=TRUE, row.name=FALSE)
 
 
 #### length recovered ####
+## site abundance recovery
+
 x <- unlist(c(dplyr::ungroup(compr) %>%
               dplyr::filter(hit) %>%
               dplyr::select(width.y)))
