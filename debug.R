@@ -1,72 +1,52 @@
-qplot(truth$width, binwidth=15)
+compr <- dplyr::group_by(compr, qid)
+truth.read.anno <- dplyr::group_by(truth.read.anno, qid)
+
+#### check number of reads aligned(correct or not)
+df <- dplyr::summarize(compr, aligned=any(nAln>0))
+
+table(df$aligned, useNA="ifany")
+
+## FALSE   TRUE
+##  8469 491531
+
+dplyr::filter(truth.read.anno, aligned) %>% nrow()
+
+## [1] 491531
+
+## PASS
+
+
+#### check number reads aligned correctly
+
+df <- dplyr::summarize(compr,
+                       aligned=any(nAln>0),
+                       isAligned=any(nAln>0) & any(hit))
+
+table(df$aligned, useNA="ifany")
+## FALSE   TRUE
+##  8469 491531
+
+table(df$isAligned, useNA="ifany")
+## FALSE   TRUE
+## 10073 489927
+
+## PASS
+
+#### check distribution by if they are in repeat region
+
+sum(table(truth.read.anno$isRep, useNA="ifany"))
+##[1] 500000
 
 
 
-s <- paste0(rep("G", 170), collapse = "")
-R1 <- rep(s, 1000000)
+#### check reads aligned incorrectly
+df <- dplyr::summarize(compr,
+                       aligned=any(nAln>0),
+                       isAligned=any(nAln>0) & any(hit),
+                       alignedNotRight = aligned & (! isAligned) )
 
-plant_base_error <- function(R, e=0.02) {
-    Re <- lapply(R, function(s){
-        idx <- which(runif(nchar(s))*0.75<=e)
-        newChar <- sample(c("A","C","G", "T"), length(idx), replace = TRUE)
-        for( i in seq_along(idx)) substr(s, idx[i], idx[i]) <- newChar[i]
-        return(s)
-    })
-    return(unlist(Re))  
-}
-R1e <- plant_base_error(R1, e=0.02)
-
-base_diff <- function(a,b) {
-    sum(strsplit(a, "")[[1]] != strsplit(b, "")[[1]])
-}
-ndiff <- mapply(base_diff, R1, R1e)
-summary(ndiff)
+table(df$alignedNotRight, useNA="ifany")
+## FALSE   TRUE
+##498396   1604
 
 
-
-
-df <- data.frame(chr=site$chr,
-                 start=site$position,
-                 strand=site$strand,
-                 width=width)
-
-merge(data.frame(chr=site$chr,
-                 start=site$position,
-                 strand=site$strand),
-      data.frame(width=width))
-
-a="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-b="AAAAAAAAAATAAAAAAAAAAAAAAAAAAAAA"
-
-#' get random loci from reference genome
-#' @param sp name of genome, Hsapiens, etc
-#' @param n  number of loci
-#' @return data.frame of chr, position, strand
-#' @example
-#' 
-get_random_loci <- function(sp=Hsapiens, n=20) {
-    chrLen <- seqlengths(sp)
-    chrLen <- chrLen[grepl("^chr\\d+$", names(chrLen))]
-    
-    n.chr <- round(as.numeric(chrLen)/sum(as.numeric(chrLen))*n)
-    n.chr[1] <- n.chr[1]+n-sum(n.chr)
-    n.chr <- setNames(n.chr, names(chrLen))
-    
-    loci <- sapply(setNames(seq_along(n.chr), names(chrLen)),
-                   function(i) {
-                       return(as.integer(runif(n.chr[i],
-                                               min = 1000,
-                                               max = chrLen[i]-3000)))
-                   })
-    
-    loci.df <- plyr::ldply(loci, function(L) data.frame(position=L), .id="chr")
-    return(loci.df)
-}
-
-
-
-scorez <- paste(rep("z", max(nchar(df[[pair]]))), collapse="")
-score <- substring(scorez, 1, nchar(df[[pair]])) 
-
-score <- sapply(nchar( df[[pair]] ), function(i) paste(rep("z",i), collapse=""))
-                                 

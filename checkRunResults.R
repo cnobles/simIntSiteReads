@@ -319,6 +319,12 @@ reads.aligned <- (dplyr::filter(compr, nAln>0) %>%
                   dplyr::distinct() %>%
                   nrow())
 
+## reads aligned, not necessarily correct
+reads.not.aligned <- (dplyr::filter(compr, !(nAln>0) ) %>%
+                  dplyr::select(qid) %>%
+                  dplyr::distinct() %>%
+                  nrow())
+
 ## reads aligned correctly
 reads.aligned.right <- (dplyr::filter(compr, hit) %>%
                         dplyr::select(qid) %>%
@@ -392,6 +398,18 @@ truth.read.anno <- (compr %>%
                                      isMulti=ifelse(is.na(isMulti), FALSE, isMulti),
                                      isAligned=isUniq|isMulti))
 
+truth.read.anno <- (compr %>%
+                    dplyr::group_by(qid) %>%
+                    dplyr::summarize(qname=qname.x[1],
+                                     chr=chr.x[1],
+                                     position=position.x[1],
+                                     breakpoint=breakpoint.x[1],
+                                     rstart=min(position.x[1],breakpoint.x[1]),
+                                     rend=max(position.x[1],breakpoint.x[1]),
+                                     aligned=any(nAln>0), ## any alignment, not necessary correct
+                                     isAligned=any(anyHit)))
+
+stopifnot(sum(truth.read.anno$aligned & truth.read.anno$isAligned) == reads.aligned.right)
 
 ## annoatte repeatMasker by position only
 truth.read.anno.gr <- makeGRangesFromDataFrame(truth.read.anno,
@@ -432,7 +450,8 @@ truth.read.anno$isLowMap <- truth.read.anno.gr$mappability < 0.5
 
 mapRepCount <- (truth.read.anno %>%
                 dplyr::group_by(aligned, isAligned, isRep, isLowMap) %>%
-                dplyr::summarize(count=n()))
+                dplyr::summarize(count=n()) %>%
+                dplyr::ungroup())
 
 write.table(as.data.frame(mapRepCount), file="mapRepCount.txt",
             quote=FALSE, sep="\t", col.name=TRUE, row.name=FALSE)
@@ -440,46 +459,65 @@ write.table(as.data.frame(mapRepCount), file="mapRepCount.txt",
 save.image(file = "debug.checkResults.RData")
 
 ## get some number for excel table ##
-## aligned correctly
-dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(isAligned, isRep) %>%
-dplyr::summarize(total=sum(count))
+## aligned correctly or not
+n.Mapped.Rep.1 <- (dplyr::ungroup(mapRepCount) %>%
+                   dplyr::filter(aligned, isRep) %>%
+                   dplyr::summarize(total=sum(count)) )
 
-dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(isAligned, !isRep) %>%
-dplyr::summarize(total=sum(count))
+n.Mapped.Rep.0  <- (dplyr::ungroup(mapRepCount) %>%
+                    dplyr::filter(aligned, !isRep) %>%
+                    dplyr::summarize(total=sum(count)))
 
-dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(isAligned, isLowMap) %>%
-dplyr::summarize(total=sum(count))
+stopifnot(sum(n.Mapped.Rep.1+n.Mapped.Rep.0) == reads.aligned)
 
+n.Mapped.lowMap <- (dplyr::ungroup(mapRepCount) %>%
+                    dplyr::filter(aligned, isLowMap) %>%
+                    dplyr::summarize(total=sum(count)))
+
+
+message("reads mapped correctly or not")
+message(paste(c(n.Mapped.Rep.1, n.Mapped.Rep.0, n.Mapped.lowMap), collapse="\t"))
 
 ## not aligned at all
-dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(!aligned, isRep) %>%
-dplyr::summarize(total=sum(count))
-
-dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(!aligned, !isRep) %>%
-dplyr::summarize(total=sum(count))
-
-dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(!aligned, isLowMap) %>%
-dplyr::summarize(total=sum(count))
+n.notMapped.Rep.1 <- (dplyr::ungroup(mapRepCount) %>%
+                      dplyr::filter(!aligned, isRep) %>%
+                      dplyr::summarize(total=sum(count)))
 
 
-## aligned but not right
-dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(aligned, !isAligned, isRep) %>%
-dplyr::summarize(total=sum(count))
+n.notMapped.Rep.0 <- (dplyr::ungroup(mapRepCount) %>%
+                      dplyr::filter(!aligned, !isRep) %>%
+                      dplyr::summarize(total=sum(count)))
 
-dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(aligned, !isAligned, !isRep) %>%
-dplyr::summarize(total=sum(count))
+stopifnot(sum(n.notMapped.Rep.1+n.notMapped.Rep.0) == reads.not.aligned)
 
-dplyr::ungroup(mapRepCount) %>%
-dplyr::filter(aligned, !isAligned, isLowMap) %>%
-dplyr::summarize(total=sum(count))
+n.notMapped.lowMap <- (dplyr::ungroup(mapRepCount) %>%
+                       dplyr::filter(!aligned, isLowMap) %>%
+                       dplyr::summarize(total=sum(count)))
+
+message("reads didn't mapped")
+message(paste(c(n.notMapped.Rep.1, n.notMapped.Rep.0, n.notMapped.lowMap), collapse="\t"))
+
+## aligned incorrectly
+n.Mapped.0.Rep.1 <- (dplyr::ungroup(mapRepCount) %>%
+                     dplyr::filter(aligned, !isAligned, isRep) %>%
+                     dplyr::summarize(total=sum(count)))
+
+n.Mapped.0.Rep.0 <- (dplyr::ungroup(mapRepCount) %>%
+                     dplyr::filter(aligned, !isAligned, !isRep) %>%
+                     dplyr::summarize(total=sum(count)))
+
+stopifnot(sum(n.Mapped.0.Rep.1 + n.Mapped.0.Rep.0) == (reads.aligned-reads.aligned.right))
+
+n.Mapped.0.lowMap <- (dplyr::ungroup(mapRepCount) %>%
+                      dplyr::filter(aligned, !isAligned, isLowMap) %>%
+                      dplyr::summarize(total=sum(count)))
+
+stopifnot(sum(n.notMapped.lowMap + n.Mapped.0.lowMap) < reads.not.aligned)
+
+message("reads mapped incorrectly")
+message(paste(c(n.Mapped.0.Rep.1, n.Mapped.0.Rep.0, n.Mapped.0.lowMap), collapse="\t"))
+
+
 
 
 #### length recovered ####
