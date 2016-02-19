@@ -185,6 +185,22 @@ plant_base_error <- function(R, e=0.02) {
     return(unlist(Re))  
 }
 
+#' cut host DNA such that R1 read would have the same host DNA as R2 read
+#' @param host_seq sequence
+#' @inheritParams make_miseq_reads
+#' @return cutted host sequence
+cut_host_dna <- function(host_seq, oligo, R2L) {
+    tech_len <- nchar(oligo$Primer) + nchar(oligo$LTRBit)
+    if (R2L < tech_len) stop("Primer and LTRBit bit should be smaller that the read length")
+    host_len <- nchar(host_seq)
+    tech_host_len <- tech_len + host_len
+    ifelse(tech_host_len > R2L,
+        # need to cut part of host DNA on the right
+        substr(host_seq, 1, host_len - (tech_host_len - R2L)), 
+        host_seq # host DNA is the same for R2 and R1
+    )
+}
+
 
 #' Given integration sequence and oligo information make R1 R2 I1
 #' @param oligo oligo information
@@ -205,6 +221,8 @@ make_miseq_reads <- function(oligo, intseq, R1L=175, R2L=130) {
                            if( nchar(seq)  >= n ) return(seq)
                            return( paste0(seq, paste0(rep("T", n-nchar(seq)), collapse="") ))
                        } ) ) }
+
+    intseq$seq <- cut_host_dna(intseq$seq, oligo, R2L)
     
     molecule_in_miseq <- paste0(oligo$P7,
                                 reverseComplement(DNAStringSet(oligo$BC)),
