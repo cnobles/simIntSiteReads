@@ -518,6 +518,59 @@ message("reads mapped incorrectly")
 message(paste(c(n.Mapped.0.Rep.1, n.Mapped.0.Rep.0, n.Mapped.0.lowMap), collapse="\t"))
 
 
+#### get reads not mapped and/or mapped incorrectly ####
+##
+## note: some reads are not aligned because they are not demultiplexed 
+##
+getReads <- function() {
+    R1 <- readFastq(metadata$uR1[1])
+    R2 <- readFastq(metadata$uR2[1])
+    
+    ## Reads aligned incorrectly
+    qnames.aligned.incorrectly <- subset(truth.read.anno,
+                                         aligned & (!isAligned))$qname
+    qnames2get <- qnames.aligned.incorrectly
+    idx <- match(paste(qnames2get, "1:N:0:0"), ShortRead::id(R1))
+    R1.aligned.incorrectly <- R1[idx]
+    idx <- match(paste(qnames2get, "2:N:0:0"), ShortRead::id(R2))
+    R2.aligned.incorrectly <- R2[idx]
+    writeFastq(R1.aligned.incorrectly, "R1.aligned.incorrectly.fastq.gz", mode="w")
+    writeFastq(R2.aligned.incorrectly, "R2.aligned.incorrectly.fastq.gz", mode="w")
+    
+    ## Reads not aligned
+    qnames.not.aligned <- subset(truth.read.anno, !aligned)$qname
+    qnames2get <- qnames.not.aligned
+    idx <- match(paste(qnames2get, "1:N:0:0"), ShortRead::id(R1))
+    R1.not.aligned <- R1[idx]
+    idx <- match(paste(qnames2get, "2:N:0:0"), ShortRead::id(R2))
+    R2.not.aligned <- R2[idx]
+    writeFastq(R1.not.aligned, "R1.not.aligned.fastq.gz", mode="w")
+    writeFastq(R2.not.aligned, "R2.not.aligned.fastq.gz", mode="w")
+    
+    ## Get reads ready for alignment
+    R1 <- R1.not.aligned
+    R2 <- R2.not.aligned
+    
+    sonicLength <- stringr::str_match(ShortRead::id(R1),
+                                      "(\\d+):\\d+\\ ")[,2]
+    sonicLength <- as.integer(sonicLength)
+    linkerEnd <- max(nchar(metadata$linkerSequence))
+    ltrEnd <- max(nchar(paste(metadata$primer, metadata$ltrBit, sep="")))
+    R1 <- ShortRead::narrow(R1,
+                            linkerEnd+1,
+                            pmin(width(R1), linkerEnd+sonicLength))
+    R2 <- ShortRead::narrow(R2,
+                            ltrEnd+1,
+                            pmin(width(R2), ltrEnd+sonicLength))
+    
+    writeFastq(R1, "R1.not.aligned.trim.fastq.gz", mode="w")
+    writeFastq(R2, "R2.not.aligned.trim.fastq.gz", mode="w")
+
+    cmd <- sprintf("bwa mem -h 20 ~/opt/ref/bwa/0.7/hg18.fasta %s %s > %s",
+                   "R1.not.aligned.trim.fastq.gz",
+                   "R2.not.aligned.trim.fastq.gz",
+                   "R2.not.aligned.trim.fastq.sam")
+}
 
 
 #### length recovered ####
@@ -589,7 +642,7 @@ save(site.abund, file="site.abun.RData")
 save.image(file = "debug.checkResults.RData")
 ##q()
 
-rmsk.gr <- get_repeakMasker()
+##rmsk.gr <- get_repeakMasker()
 
 
 truth.site.call <- read.table("truth.site.call.txt", header=TRUE)
