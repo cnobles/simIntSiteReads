@@ -1,4 +1,5 @@
 library(stringdist)
+library(stringr)
 
 source("sequencing_error.R")
 
