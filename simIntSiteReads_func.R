@@ -223,6 +223,7 @@ make_miseq_reads <- function(oligo, intseq, R1L=175, R2L=130) {
                        } ) ) }
 
     intseq$seq <- cut_host_dna(intseq$seq, oligo, R2L)
+    intseq$width <- nchar(intseq$seq)
     
     molecule_in_miseq <- paste0(oligo$P7,
                                 reverseComplement(DNAStringSet(oligo$BC)),
