@@ -71,13 +71,13 @@ get_args <- function() {
     
     return(args)
 }
-#args <- get_args()
-#print(t(as.data.frame(args)), quote=FALSE)
+args <- get_args()
+print(t(as.data.frame(args)), quote=FALSE)
 
-args <- list(freeze = "hg18", outFolder = "./output", sites = 10, 
-             sonicLength = 500, R1L = 179, R2L = 143, info = "sampleInfoShort.tsv", 
-             codeDir = ".", errRate = 1, seed = 123457)
-args
+#args <- list(freeze = "hg18", outFolder = "./output", sites = 10, 
+#             sonicLength = 500, R1L = 179, R2L = 143, info = "sampleInfoShort.tsv", 
+#             codeDir = ".", errRate = 1, seed = 123457)
+#args
 
 libs <- c("stringr",
           "RMySQL",
