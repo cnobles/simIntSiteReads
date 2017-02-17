@@ -50,14 +50,14 @@ get_args <- function() {
                         default=179,
                         help="R1 read length")
     parser$add_argument("-2", "--R2L", type="integer", nargs=1,
-                        default=144,
+                        default=143,
                         help="R2 read length")
     parser$add_argument("-m", "--info", type="character", nargs=1,
                         default="sampleInfo.tsv",
                         help="metadata file, default sampleInfo.tsv")
-    parser$add_argument("-g", "--group", type="character", nargs=1,
-                        default="intsites_miseq.read",
-                        help="number of sonic lengths for each site")
+    #parser$add_argument("-g", "--group", type="character", nargs=1,
+    #                    default="intsites_miseq.read",
+    #                    help="number of sonic lengths for each site")
     parser$add_argument("-c", "--codeDir", type="character", nargs=1,
                         default=codeDir,
                         help="Directory of code")
@@ -71,8 +71,13 @@ get_args <- function() {
     
     return(args)
 }
-args <- get_args()
-print(t(as.data.frame(args)), quote=FALSE)
+#args <- get_args()
+#print(t(as.data.frame(args)), quote=FALSE)
+
+args <- list(freeze = "hg18", outFolder = "./output", sites = 10, 
+             sonicLength = 500, R1L = 179, R2L = 143, info = "sampleInfoShort.tsv", 
+             codeDir = ".", errRate = 1, seed = 123457)
+args
 
 libs <- c("stringr",
           "RMySQL",
@@ -99,9 +104,8 @@ options(dplyr.width = Inf)
 sampleInfo <- read.table(file.path(args$codeDir, args$info), header=TRUE)
 sampleInfo$linkerSequence <- gsub("N", "T", sampleInfo$linkerSequence)
 
-
 #' @note this is specific to the integration protocol
-oligo <- data.frame(P5="AATGATACGGCGACCACCGA",
+oligo <- data.frame(P5="AATGATACGGCGACCACCGAG",
                     P7="CAAGCAGAAGACGGCATACGAGAT",
                     Spacer="AGTCAGTCAGCC",
                     SP1="ATCTACACCAGGACTGACGCTATGGTAATTGT",
@@ -125,10 +129,10 @@ oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
 ##                   position=c(52699700, 77440127, 1330529, 153461600, 148889088),
 ##                   strand=c("+", "+", "+", "-", "+") )
 
-message("\nGenerate random sites")
+message("Generate random sites")
 site <- get_random_loci(sp=Hsapiens, n=as.integer(args$sites*1.2))
 
-message("\nRemoving sites close to N regions")
+message("Removing sites close to N regions")
 checkNbase <- function(site, width=3000) {
     seq.plus <- get_sequence_downstream(Hsapiens,
                                         site$chr,
@@ -147,7 +151,7 @@ checkNbase <- function(site, width=3000) {
 isNClose <- checkNbase(site)
 
 site <- site[!isNClose,]
-stopifnot(!any(checkNbase(site)))
+#stopifnot(!any(checkNbase(site))) # Not necessary from above logic
 site <- dplyr::sample_n(site, args$sites, replace=FALSE)
 
 site <- as.data.table(site)
@@ -159,7 +163,7 @@ pos <- site[,
             1:nrow(site)]
 
 
-message("\nGenerate human sequences for sites")
+message("Generate human sequences for sites")
 intseq <- get_sequence_downstream(Hsapiens,
                                   pos$chr,
                                   pos$position,
@@ -171,7 +175,7 @@ intseq <- dplyr::mutate(intseq,
                         sampleid=siteid%%nrow(oligo)+1)
 
 
-message("\nGenerate machine sequences for sites")
+message("Generate machine sequences for sites")
 intseq.list <- split(intseq, intseq$sampleid)
 I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
                          {message(i, "\tof\t", length(intseq.list))
@@ -183,9 +187,9 @@ I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
                              ,BPPARAM=MulticoreParam(5)) 
 
 
-I1R1R2qNamedf <- dplyr::rbind_all(I1R1R2qName.list)
+I1R1R2qNamedf <- dplyr::bind_rows(I1R1R2qName.list)
 
-message("\nPlanting base errors with rate ", args$errRate)
+message("Planting base errors with rate ", args$errRate)
 I1R1R2qNamedf$I1 <- plant_base_error(I1R1R2qNamedf$I1, args$errRate)
 I1R1R2qNamedf$R1 <- plant_base_error(I1R1R2qNamedf$R1, args$errRate)
 I1R1R2qNamedf$R2 <- plant_base_error(I1R1R2qNamedf$R2, args$errRate)
@@ -195,11 +199,11 @@ I1R1R2qNamedf <- (I1R1R2qNamedf %>%
                   dplyr::mutate(qname=sub(":\\d+$", "", qname),
                                 qname=paste0(qname, ":", 1:n())))
 
-message("\nDump sequences to fastq files")
+message("Dump sequences to fastq files")
 makeInputFolder(I1R1R2qNamedf, args$outFolder)
 
 
-message("\nDump truth to bed file")
+message("Dump truth to bed file")
 truth.bed <- (intseq %>%
               dplyr::mutate(
                   breakpoint=ifelse(strand=="+", position+width, position-width),
