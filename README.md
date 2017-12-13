@@ -28,9 +28,16 @@ Below are columns that must contain sequences in the sampleInfo to generate simu
 
 ## Template Structure
 ```
-           R1 -------------->...                         I1 ->
+Single Index (I2: FALSE):
+        R1 ----------------->...                      I1 ---->
 P5 - SP1 - linkerSequence - hg - ltrBit - primer - SP2 - bcSeq - P7
-                          ...<--------------- R2         
+                          ...<------------------ R2         
+or
+
+Dual Index (I2: TRUE)
+                                     R1 -->...                      I1 ---->
+P5 - SP1 - linkSeq1 - bcSeq2 - linkSeq2 - hg - ltrBit - primer - SP2 - bcSeq - P7
+                      <----- I2       ...<---------------------- R2         
 ```
 
 # Testing
