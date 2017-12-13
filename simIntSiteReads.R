@@ -76,6 +76,12 @@ get_args <- function() {
     if(is.null(args$refGenome)) args$refGenome <- params$refGenome
     stopifnot(length(args$refGenome)==1)
     
+    if(params$DualIndex){
+      args$DualIndex <- TRUE
+    }else{
+      args$DualIndex <- FALSE
+    }
+    
     return(list("args" = args, "params" = params))
 }
 arguments <- get_args()
@@ -112,20 +118,41 @@ options(dplyr.width = Inf)
 #' alias,linkerSequence,bcSeq,gender,primer,ltrBit,largeLTRFrag,vectorSeq
 #' GTSP0308-1,GAACGAGCACTAGTAAGCCCNNNNNNNNNNNNCTCCGCTTAAGGGACT,GTATTCGACTTG,m,GAAAATC,TCTAGCA,TGCTAGAGATTTTCCACACTGACTAAAAGGGTCT,vector_WasLenti.fa
 sampleInfo <- read.table(file.path(args$codeDir, args$info), header=TRUE)
-sampleInfo$linkerSequence <- gsub("N", "T", sampleInfo$linkerSequence)
+if(args$DualIndex){
+  sampleInfo$bcSeq2 <- gsub("N", "T", sampleInfo$bcSeq2)
+  sampleInfo$bcSeq2 <- gsub("W", "A", sampleInfo$bcSeq2)
+}else{
+  sampleInfo$linkerSequence <- gsub("N", "T", sampleInfo$linkerSequence)
+}
 
-#' @note this is specific to the integration protocol
-oligo <- data.frame(P5=params$seqs$P5,
-                    P7=params$seqs$P7,
-                    SP1=params$seqs$SP1,
-                    SP2=params$seqs$SP2,
-                    Linker=sampleInfo$linkerSequence,
-                    BC=sampleInfo$bcSeq,
-                    Primer=sampleInfo$primer,
-                    LTRBit=sampleInfo$ltrBit)
-oligo$R2Start <- with(oligo, 1+nchar(paste0(P7, BC, SP2))) #! 1 based
-oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
-
+#' Single index read
+if(!args$DualIndex){
+  oligo <- data.frame(P5=params$seqs$P5,
+                      P7=params$seqs$P7,
+                      SP1=params$seqs$SP1,
+                      SP2=params$seqs$SP2,
+                      Linker=sampleInfo$linkerSequence,
+                      BC=sampleInfo$bcSeq,
+                      Primer=sampleInfo$primer,
+                      LTRBit=sampleInfo$ltrBit)
+  oligo$R2Start <- with(oligo, 1+nchar(paste0(P7, BC, SP2))) #! 1 based
+  oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
+}else{
+  oligo <- data.frame(P5=params$seqs$P5,
+                      P7=params$seqs$P7,
+                      SP1=params$seqs$SP1,
+                      SP2=params$seqs$SP2,
+                      Linker=sampleInfo$linkerSequence,
+                      BC1=sampleInfo$bcSeq1,
+                      BC2=sampleInfo$bcSeq2,
+                      Primer=sampleInfo$primer,
+                      Bit=sampleInfo$bitSeq)
+  oligo$R2Start <- with(
+    oligo, 1+nchar(paste0(P7, BC1, SP2))) #! 1 based
+  oligo$R1Start <- with(
+    oligo, 1+nchar(paste0(P5, SP1, BC2, Linker))-params$R1LinkerOffset) #! 1 based
+  
+}
 
 ## validated known sites from a prep
 ##clone1	Clonal 293T cells with known integration at chr1+52699700
@@ -192,7 +219,8 @@ I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
                           df <- make_miseq_reads(oligo[i,],
                                                  intseq.list[[i]],
                                                  R1L=args$R1L,
-                                                 R2L=args$R2L)
+                                                 R2L=args$R2L,
+                                                 DualIndex=args$DualIndex)
                           return(df) }
                              ,BPPARAM=MulticoreParam(params$cores)) 
 
@@ -202,6 +230,9 @@ message("Planting base errors with rate ", args$errRate)
 I1R1R2qNamedf$I1 <- plant_base_error(I1R1R2qNamedf$I1, args$errRate)
 I1R1R2qNamedf$R1 <- plant_base_error(I1R1R2qNamedf$R1, args$errRate)
 I1R1R2qNamedf$R2 <- plant_base_error(I1R1R2qNamedf$R2, args$errRate)
+if(args$DualIndex){
+  I1R1R2qNamedf$I2 <- plant_base_error(I1R1R2qNamedf$I2, args$errRate)
+}
 
 ## fix qname qid
 I1R1R2qNamedf <- (I1R1R2qNamedf %>%
@@ -209,8 +240,7 @@ I1R1R2qNamedf <- (I1R1R2qNamedf %>%
                                 qname=paste0(qname, ":", 1:n())))
 
 message("Dump sequences to fastq files")
-makeInputFolder(I1R1R2qNamedf, args$outFolder)
-
+makeInputFolder(I1R1R2qNamedf, args$outFolder, DualIndex=args$DualIndex)
 
 message("Dump truth to bed file")
 truth.bed <- (intseq %>%

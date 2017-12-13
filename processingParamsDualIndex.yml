@@ -28,3 +28,7 @@ seqs:
 # the following to TRUE, otherwise FALSE for single index read generation.
 # Refer to  README.md for diagram and required columns in metadata.
 DualIndex: TRUE
+
+# For R1 read when dual indexing is true, how many bases of the
+# linker are sequenced? Positive integer.
+R1LinkerOffset: 0

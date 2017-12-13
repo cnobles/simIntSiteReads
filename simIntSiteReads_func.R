@@ -197,7 +197,7 @@ plant_base_error <- function(R, e=0.02) {
 #'       I1: @M03249:(#chr):(#strand):(#start):(#width):(#index) 1:N:0:0
 #'       qname only contains the common part
 #' @example make_miseq_reads(oligo, intseq)
-make_miseq_reads <- function(oligo, intseq, R1L=179, R2L=143) {
+make_miseq_reads <- function(oligo, intseq, R1L=179, R2L=143, DualIndex=FALSE) {
     options(stringsAsFactors=FALSE)
     
     patch_randomGATC <- function(reads, n) {
@@ -206,16 +206,29 @@ make_miseq_reads <- function(oligo, intseq, R1L=179, R2L=143) {
                            return( paste0(seq, paste0(rep("T", n-nchar(seq)), collapse="") ))
                        } ) ) }
     
-    molecule_in_miseq <- paste0(oligo$P7,
-                                reverseComplement(DNAStringSet(oligo$BC)),
-                                oligo$SP2,
-                                oligo$Primer,
-                                oligo$LTRBit,
-                                intseq$seq,
-                                reverseComplement(DNAStringSet(oligo$Linker)),
-                                reverseComplement(DNAStringSet(oligo$SP1)),
-                                reverseComplement(DNAStringSet(oligo$P5)))
-    
+    if(DualIndex){
+      molecule_in_miseq <- paste0(oligo$P7,
+                                  reverseComplement(DNAStringSet(oligo$BC1)),
+                                  oligo$SP2,
+                                  oligo$Primer,
+                                  oligo$Bit,
+                                  intseq$seq,
+                                  reverseComplement(DNAStringSet(oligo$Linker)),
+                                  oligo$BC2,
+                                  reverseComplement(DNAStringSet(oligo$SP1)),
+                                  reverseComplement(DNAStringSet(oligo$P5)))
+    }else{
+      molecule_in_miseq <- paste0(oligo$P7,
+                                  reverseComplement(DNAStringSet(oligo$BC)),
+                                  oligo$SP2,
+                                  oligo$Primer,
+                                  oligo$LTRBit,
+                                  intseq$seq,
+                                  reverseComplement(DNAStringSet(oligo$Linker)),
+                                  reverseComplement(DNAStringSet(oligo$SP1)),
+                                  reverseComplement(DNAStringSet(oligo$P5)))
+    }
+      
     R2seq <- substr(molecule_in_miseq, oligo$R2Start, oligo$R2Start+R2L-1)
     R2seq <- patch_randomGATC(R2seq, R2L)
     
@@ -223,8 +236,13 @@ make_miseq_reads <- function(oligo, intseq, R1L=179, R2L=143) {
     R1seq <- substr(molecule_in_miseq.rc, oligo$R1Start, oligo$R1Start+R1L-1)
     R1seq <- patch_randomGATC(R1seq, R1L)
     
-    I1seq <- rep(oligo$BC, length(molecule_in_miseq))
-    
+    if(DualIndex){
+      I1seq <- rep(oligo$BC1, length(molecule_in_miseq))
+      I2seq <- rep(oligo$BC2, length(molecule_in_miseq))
+    }else{
+      I1seq <- rep(oligo$BC, length(molecule_in_miseq))
+    }
+     
     ##@M03249:67:000000000-AFCKK:1:1101:14105:1552 2:N:0:0"
     qname <- sprintf("M03249:1:000-SIM%s:1:1:%s:%s",
                      paste0(intseq$chr,
@@ -232,11 +250,18 @@ make_miseq_reads <- function(oligo, intseq, R1L=179, R2L=143) {
                             intseq$position),
                      intseq$width,
                      seq_along(I1seq) )
-    
-    return(data.frame(I1=as.character(I1seq),
-                      R1=as.character(R1seq),
-                      R2=as.character(R2seq),
-                      qname=as.character(qname)))
+    if(DualIndex){
+      return(data.frame(I1=as.character(I1seq),
+                        I2=as.character(I2seq),
+                        R1=as.character(R1seq),
+                        R2=as.character(R2seq),
+                        qname=as.character(qname)))
+    }else{
+      return(data.frame(I1=as.character(I1seq),
+                        R1=as.character(R1seq),
+                        R2=as.character(R2seq),
+                        qname=as.character(qname)))
+    }
 }
 
 
@@ -247,22 +272,34 @@ make_miseq_reads <- function(oligo, intseq, R1L=179, R2L=143) {
 #' @return nothing returned, a directory is created and ready for analysis
 #' @example makeInputFolder(df, "intSiteSimulation")
 #'
-makeInputFolder <- function(df=df, path="intSiteSimulation") {
+makeInputFolder <- function(df=df, path="intSiteSimulation", DualIndex=FALSE) {
     unlink(path, recursive=TRUE, force=TRUE)
     message("Directory ", path, " deleted")
     
     stopifnot(c("I1", "R1", "R2") %in% colnames(df))
+    if(DualIndex){
+      stopifnot(c("I2") %in% colnames(df))
+    }
     
     ## write fastq files in Data
     dir.create(file.path(path, "Data"),
                recursive=TRUE,
                showWarnings=FALSE)
     
-    qnameComments <- c("I1"="1:N:0:0",
-                       "R1"="1:N:0:0",
-                       "R2"="2:N:0:0") 
+    if(DualIndex){
+      qnameComments <- c("I1"="1:N:0:0",
+                         "I2"="2:N:0:0",
+                         "R1"="1:N:0:0",
+                         "R2"="2:N:0:0") 
+      pairs <- c("I1", "I2", "R1", "R2")
+    }else{
+      qnameComments <- c("I1"="1:N:0:0",
+                         "R1"="1:N:0:0",
+                         "R2"="2:N:0:0") 
+      pairs <- c("I1", "R1", "R2")
+    }
+      
     
-    pairs <- c("I1", "R1", "R2")
     fastqFile <- setNames(sprintf("Undetermined_S0_L001_%s_001.fastq.gz",
                                   pairs), pairs)
     
@@ -270,10 +307,8 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
         message("\nWriting ", pair)
         
         readLength <- nchar(df[[pair]])
-        message(unique(readLength)) ## Test
         scorez <- paste(rep("z", max(readLength)), collapse="")
         score <- substring(scorez, 1, readLength) 
-        message(unique(nchar(score))) ##Test
         
         read <- ShortReadQ(DNAStringSet( df[[pair]] ),
                            FastqQuality( score ),
@@ -289,10 +324,14 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
     file.copy(file.path(args$codeDir, args$info),
               file.path(path, "sampleInfo.tsv"),
               overwrite=TRUE)
-    
+
     ## copy processingParams.tsv
     file.copy(file.path(args$codeDir, "processingParams.tsv"),
               file.path(path, "processingParams.tsv"),
+              overwrite=TRUE)
+    
+    ## copy processingParams.tsv
+    file.copy(args$params, file.path(path, "processingParams.yml"),
               overwrite=TRUE)
     
     ## copy vector fasta
