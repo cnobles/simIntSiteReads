@@ -19,12 +19,12 @@ sdSonicLength: 251
 seqs:
     # As observed from R1 sequencing direction
     P5: AATGATACGGCGACCACCGAG
-    SP1: ATCTACACCAGGACTGACGCTATGGTAATTGTGTA
+    SP1: ATCTACAC
     # As observed from R2 sequencing direction
     P7: CAAGCAGAAGACGGCATACGAGAT
-    SP2: AGTCAGTCAGCCAGACCCTTTTAGTCAGTGTG
+    SP2: GTGACTGGAGTCCTCTCTATGGGCAGTCGGTGAT
 
 # Indexing: If simulated reads are to be dual index reads generated, set 
 # the following to TRUE, otherwise FALSE for single index read generation.
 # Refer to  README.md for diagram and required columns in metadata.
-DualIndex: FALSE
+DualIndex: TRUE

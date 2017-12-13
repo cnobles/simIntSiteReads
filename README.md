@@ -35,9 +35,9 @@ P5 - SP1 - linkerSequence - hg - ltrBit - primer - SP2 - bcSeq - P7
 or
 
 Dual Index (I2: TRUE)
-                                     R1 -->...                      I1 ---->
-P5 - SP1 - linkSeq1 - bcSeq2 - linkSeq2 - hg - ltrBit - primer - SP2 - bcSeq - P7
-                      <----- I2       ...<---------------------- R2         
+                                R1 -->...                      I1 ---->
+P5 - SP1 - bcSeq2 - linkerSequence - hg - ltrBit - primer - SP2 - bcSeq - P7
+           <----- I2               ...<------------------ R2         
 ```
 
 # Testing
