@@ -21,22 +21,26 @@
 
 options(stringsAsFactors=FALSE)
 
+codeDir <- dirname(sub(
+    "--file=", "", grep("--file=", commandArgs(trailingOnly=FALSE), value=T)))
+if( length(codeDir)!=1 ){
+    codeDir <- list.files(
+        path="~", pattern="simIntSiteReads$", recursive=TRUE, 
+        include.dirs=TRUE, full.names=TRUE)
+}
+
 get_args <- function() {
     suppressMessages(library(argparse))
     
-    codeDir <- dirname(sub("--file=", "", grep("--file=", commandArgs(trailingOnly=FALSE), value=T)))
-    if( length(codeDir)!=1 ) codeDir <- list.files(path="~", pattern="simIntSiteReads$", recursive=TRUE, include.dirs=TRUE, full.names=TRUE)
     stopifnot(file.exists(file.path(codeDir, "simIntSiteReads.R")))
-    stopifnot(file.exists(file.path(codeDir, "processingParams.tsv")))
-    
-    refGenome <- read.table(file.path(codeDir, "processingParams.tsv"),
-                            header=TRUE)$refGenome
-    stopifnot(length(refGenome)==1)
-    
+
     parser <- ArgumentParser(formatter_class='argparse.RawTextHelpFormatter')
-    parser$add_argument("-f", "--freeze", type="character", nargs=1,
-                        default=refGenome,
-                        help="hg18, etc, default read from processingParams.tsv")
+    parser$add_argument("-p", "--params", type="character", nargs=1,
+                        default=file.path(codeDir, "processingParams.yml"),
+                        help="Processing parameters.")
+    parser$add_argument("-f", "--refGenome", type="character", nargs=1,
+                        default=NULL,
+                        help="hg38, etc, default read from processingParams.yml")
     parser$add_argument("-o", "--outFolder", type="character", nargs=1,
                         default="intSiteSimulation",
                         help="output folder")
@@ -55,9 +59,6 @@ get_args <- function() {
     parser$add_argument("-m", "--info", type="character", nargs=1,
                         default="sampleInfo.tsv",
                         help="metadata file, default sampleInfo.tsv")
-    #parser$add_argument("-g", "--group", type="character", nargs=1,
-    #                    default="intsites_miseq.read",
-    #                    help="number of sonic lengths for each site")
     parser$add_argument("-c", "--codeDir", type="character", nargs=1,
                         default=codeDir,
                         help="Directory of code")
@@ -69,9 +70,18 @@ get_args <- function() {
     args$errRate <- as.numeric(args$errRate)
     args$seed <- 123457
     
-    return(args)
+    stopifnot(file.exists(args$params))
+    suppressMessages(library(yaml))
+    params <- suppressWarnings(yaml.load_file(args$params))
+    if(is.null(args$refGenome)) args$refGenome <- params$refGenome
+    stopifnot(length(args$refGenome)==1)
+    
+    return(list("args" = args, "params" = params))
 }
-args <- get_args()
+arguments <- get_args()
+params <- arguments$params
+args <- arguments$args
+refGenome <- args$refGenome
 print(t(as.data.frame(args)), quote=FALSE)
 
 #args <- list(freeze = "hg18", outFolder = "./output", sites = 10, 
@@ -88,7 +98,7 @@ libs <- c("stringr",
           "ShortRead",
           "BiocParallel",
           "BSgenome",
-          sprintf("BSgenome.Hsapiens.UCSC.%s", args$freeze))
+          sprintf("BSgenome.Hsapiens.UCSC.%s", args$refGenome))
 null <- suppressMessages(sapply(libs, library, character.only=TRUE))
 
 source(file.path(args$codeDir, "simIntSiteReads_func.R"))
@@ -105,17 +115,15 @@ sampleInfo <- read.table(file.path(args$codeDir, args$info), header=TRUE)
 sampleInfo$linkerSequence <- gsub("N", "T", sampleInfo$linkerSequence)
 
 #' @note this is specific to the integration protocol
-oligo <- data.frame(P5="AATGATACGGCGACCACCGAG",
-                    P7="CAAGCAGAAGACGGCATACGAGAT",
-                    Spacer="AGTCAGTCAGCC",
-                    SP1="ATCTACACCAGGACTGACGCTATGGTAATTGT",
-                    SP2="AGACCCTTTTAGTCAGTGTG",
-                    IP="CACACTGACTAAAAGGGTCTGGCTGACTGACT",
+oligo <- data.frame(P5=params$seqs$P5,
+                    P7=params$seqs$P7,
+                    SP1=params$seqs$SP1,
+                    SP2=params$seqs$SP2,
                     Linker=sampleInfo$linkerSequence,
                     BC=sampleInfo$bcSeq,
                     Primer=sampleInfo$primer,
                     LTRBit=sampleInfo$ltrBit)
-oligo$R2Start <- with(oligo, 1+nchar(paste0(P7, BC, Spacer, SP2))) #! 1 based
+oligo$R2Start <- with(oligo, 1+nchar(paste0(P7, BC, SP2))) #! 1 based
 oligo$R1Start <- with(oligo, 1+nchar(paste0(P5, SP1))) #! 1 based
 
 
@@ -133,7 +141,7 @@ message("Generate random sites")
 site <- get_random_loci(sp=Hsapiens, n=as.integer(args$sites*1.2))
 
 message("Removing sites close to N regions")
-checkNbase <- function(site, width=3000) {
+checkNbase <- function(site, width=as.numeric(params$Nwidth)) {
     seq.plus <- get_sequence_downstream(Hsapiens,
                                         site$chr,
                                         site$position,
@@ -155,13 +163,15 @@ site <- site[!isNClose,]
 site <- dplyr::sample_n(site, args$sites, replace=FALSE)
 
 site <- as.data.table(site)
-pos <- site[,
-            data.frame(chr,
+pos <- site[,data.frame(chr,
                        position,
                        strand,
-                       width=sort(get_random_width_gaussian(n=args$sonicLength))),
+                       width=sort(get_random_width_gaussian(
+                           n=args$sonicLength, 
+                           mean=params$meanSonicLength,
+                           sd=params$sdSonicLength, 
+                           minWidth=params$mingDNA))),
             1:nrow(site)]
-
 
 message("Generate human sequences for sites")
 intseq <- get_sequence_downstream(Hsapiens,
@@ -184,8 +194,7 @@ I1R1R2qName.list <- bplapply(seq(intseq.list), function(i)
                                                  R1L=args$R1L,
                                                  R2L=args$R2L)
                           return(df) }
-                             ,BPPARAM=MulticoreParam(5)) 
-
+                             ,BPPARAM=MulticoreParam(params$cores)) 
 
 I1R1R2qNamedf <- dplyr::bind_rows(I1R1R2qName.list)
 

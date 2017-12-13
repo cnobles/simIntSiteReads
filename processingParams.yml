@@ -1,0 +1,25 @@
+## Parameters for simulating reads for targeted sequencing analysis by the 
+## INSPIIRED pipeline.
+# Freeze or reference genome. Must be installed as a BSgenome package.
+refGenome: hg38
+# Width by which to reject sequences if they are near bases annotated as "N".
+Nwidth: 3000
+# Number of cores to parallel processing (max count).
+cores: 5
+# Minimum width of genomic DNA to have in simulated reads.
+mingDNA: 30
+# Mean genomic DNA within simulated reads.
+meanSonicLength: 70
+# Standard deviation of genomic DNA within simulated reads.
+sdSonicLength: 251
+
+# Sequences related to constructing templates include flowcell binding sequences
+# known as P5 and P7, and spacer sequences SP1 and SP2 which separate portion
+# of the reads from one another. For template schematic, refer to README.md.
+seqs:
+    # As observed from R1 sequencing direction
+    P5: AATGATACGGCGACCACCGAG
+    SP1: ATCTACACCAGGACTGACGCTATGGTAATTGTGTA
+    # As observed from R2 sequencing direction
+    P7: CAAGCAGAAGACGGCATACGAGAT
+    SP2: AGTCAGTCAGCCAGACCCTTTTAGTCAGTGTG

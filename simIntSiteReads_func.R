@@ -197,7 +197,7 @@ plant_base_error <- function(R, e=0.02) {
 #'       I1: @M03249:(#chr):(#strand):(#start):(#width):(#index) 1:N:0:0
 #'       qname only contains the common part
 #' @example make_miseq_reads(oligo, intseq)
-make_miseq_reads <- function(oligo, intseq, R1L=175, R2L=130) {
+make_miseq_reads <- function(oligo, intseq, R1L=179, R2L=143) {
     options(stringsAsFactors=FALSE)
     
     patch_randomGATC <- function(reads, n) {
@@ -208,7 +208,6 @@ make_miseq_reads <- function(oligo, intseq, R1L=175, R2L=130) {
     
     molecule_in_miseq <- paste0(oligo$P7,
                                 reverseComplement(DNAStringSet(oligo$BC)),
-                                oligo$Spacer,
                                 oligo$SP2,
                                 oligo$Primer,
                                 oligo$LTRBit,
@@ -271,8 +270,10 @@ makeInputFolder <- function(df=df, path="intSiteSimulation") {
         message("\nWriting ", pair)
         
         readLength <- nchar(df[[pair]])
+        message(unique(readLength)) ## Test
         scorez <- paste(rep("z", max(readLength)), collapse="")
         score <- substring(scorez, 1, readLength) 
+        message(unique(nchar(score))) ##Test
         
         read <- ShortReadQ(DNAStringSet( df[[pair]] ),
                            FastqQuality( score ),
