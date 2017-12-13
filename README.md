@@ -19,6 +19,13 @@ Rscript ./simIntSiteReads.R -w uniform
 Rscript ./simIntSiteReads.R -w maxwell_boltzmann 
 ```
 
+## Sample Info dependencies
+Below are columns that must contain sequences in the sampleInfo to generate simulated reads:
+* linkerSequence
+* bcSeq
+* primer
+* ltrBit
+
 
 # Testing
 
